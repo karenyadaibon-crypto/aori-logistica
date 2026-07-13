@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AORI — Órdenes y Logística</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg: #ffffff;
+    --bg-soft: #f7f7f8;
+    --accent: #b8895f;
+    --accent-dark: #8a6440;
+    --accent-soft: #f2e6d8;
+    --ok: #2e7d4f;
+    --ok-soft: #e5f4ec;
+    --warn: #b3720b;
+    --warn-soft: #fdf1de;
+    --info: #2563a8;
+    --info-soft: #e7f0fb;
+    --danger: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  #app { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
+
+  .brand {
+    display:flex; align-items:baseline; gap:10px; margin-bottom: 16px;
+    background: #f8cfe0; padding: 16px 20px; border-radius: 14px;
+  }
+  .brand h1 { font-size: 24px; margin:0; letter-spacing: 0.5px; color: #a8452a; font-weight: 800; }
+  .brand span.tag { color: #8a5560; font-size: 13px; }
+
+  nav.tabs { display:flex; gap:4px; margin: 18px 0 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  nav.tabs button {
+    background:none; border:none; cursor:pointer;
+    padding: 9px 14px; font-size: 13.5px; color: var(--muted);
+    border-bottom: 2px solid transparent; font-weight: 600;
+  }
+  nav.tabs button.active { color: var(--accent-dark); border-bottom-color: var(--accent); }
+  nav.tabs button:hover { color: var(--ink); }
+
+  .view { display:none; }
+  .view.active { display:block; }
+
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin-bottom: 22px; }
+  .card { background: var(--bg-soft); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card .num { font-size: 26px; font-weight:700; }
+  .card .lbl { color: var(--muted); font-size:12.5px; margin-top:2px; }
+
+  .panel { background: var(--bg); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:18px; }
+  .panel h2 { font-size:15px; margin:0 0 14px; }
+  .panel h3 { font-size:13.5px; margin: 18px 0 8px; color: var(--muted); text-transform:uppercase; letter-spacing:0.4px; }
+
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .field { display:flex; flex-direction:column; gap:5px; flex:1; min-width:160px; margin-bottom:12px; }
+  .field label { font-size:12px; color: var(--muted); font-weight:600; }
+  .field input, .field select, .field textarea {
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13.5px;
+    font-family: inherit; background: var(--bg); color: var(--ink);
+  }
+  .field textarea { resize: vertical; min-height:56px; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:1.5px solid var(--accent); border-color: var(--accent); }
+
+  .btn {
+    border:1px solid var(--line); background: var(--bg); color: var(--ink);
+    padding: 8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .btn:hover { background: var(--bg-soft); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color:#fff; }
+  .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; }
+  .btn-danger { color: var(--danger); }
+  .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+
+  table { width:100%; border-collapse: collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:0.3px; font-weight:700; }
+  tr:hover td { background: var(--bg-soft); }
+
+  .badge { display:inline-block; padding:3px 9px; border-radius:100px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .badge-pendiente { background: var(--warn-soft); color: var(--warn); }
+  .badge-aprobado { background: #e6f7f5; color: #0f7a72; }
+  .badge-empacado { background: var(--info-soft); color: var(--info); }
+  .badge-en_ruta { background: var(--accent-soft); color: var(--accent-dark); }
+  .badge-entregado { background: var(--ok-soft); color: var(--ok); }
+  .badge-envio { background: var(--info-soft); color: var(--info); }
+  .badge-pickup { background: var(--accent-soft); color: var(--accent-dark); }
+  .badge-foraneo { background: #f3e8fd; color: #6d28a4; }
+
+  .aori-logo-svg { display:block; }
+  .aori-logo-svg g, .aori-logo-svg path { fill: currentColor !important; }
+  .brand-logo-wrap { display:flex; align-items:center; gap:14px; }
+  .brand-slogan { font-size:12px; font-style:italic; color:#a8452a; margin-top:2px; }
+
+  .login-screen {
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(160deg, #fbeaec 0%, #fdf6f2 100%); padding:20px; box-sizing:border-box;
+  }
+  .login-card { background:#fff; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:32px 30px; width:100%; max-width:360px; }
+  .login-title { text-align:center; font-size:20px; font-weight:800; color:#a8452a; letter-spacing:1px; margin:0 0 2px; }
+  .login-error { background: #fbe8e7; color: var(--danger); border-radius:8px; padding:8px 10px; font-size:12.5px; margin-top:10px; }
+  .login-msg { text-align:center; font-size:12.5px; color: var(--muted); margin-top:14px; }
+  #logoutBtn { margin-left:auto; }
+  .doc-header { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+  .doc-header .doc-header-text { line-height:1.3; }
+  .doc-header .doc-header-title { font-size:11px; letter-spacing:1.5px; color:#777; text-transform:uppercase; font-weight:700; }
+  .doc-header .doc-header-slogan { font-size:11px; font-style:italic; color:#a8452a; }
+
+  .stepper { display:flex; align-items:flex-start; margin: 4px 0 18px; padding:0 4px; }
+  .step { display:flex; flex-direction:column; align-items:center; position:relative; flex:1; min-width:0; }
+  .step-line {
+    position:absolute; top:14px; left:50%; width:100%; height:3px; background:var(--line); z-index:0;
+  }
+  .step:last-child .step-line { display:none; }
+  .step-line.line-done { background:var(--ok); }
+  .step-dot {
+    width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800; border:2px solid var(--line); background:#fff; color:var(--muted);
+    position:relative; z-index:1; flex:0 0 auto;
+  }
+  .step-label { font-size:10.5px; margin-top:6px; color:var(--muted); text-align:center; line-height:1.2; }
+  .step-done .step-dot { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .step-done .step-label { color:var(--ok); font-weight:700; }
+  .step-current .step-dot { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 0 0 4px var(--accent-soft); }
+  .step-current .step-label { color:var(--accent-dark); font-weight:700; }
+
+  .tipoSelect { border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-size:11.5px; font-weight:600; background:var(--bg); }
+  .histList { list-style:none; padding:0; margin:6px 0 0; font-size:12px; }
+  .histList li { padding:4px 0; border-bottom:1px dashed var(--line); color: var(--muted); }
+  .histList li:last-child { border-bottom:none; }
+
+  .zone-tag {
+    display:inline-flex; align-items:center; gap:6px; background: var(--bg-soft); border:1px solid var(--line);
+    border-radius:100px; padding:5px 6px 5px 12px; font-size:12.5px; font-weight:600;
+  }
+  .zone-tag button {
+    border:none; background:none; cursor:pointer; color: var(--muted); font-size:14px; line-height:1;
+    width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  }
+  .zone-tag button:hover { background: var(--line); color: var(--danger); }
+  .zone-check-item {
+    display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px;
+    padding:5px 10px; font-size:12.5px; cursor:pointer;
+  }
+
+  .filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:flex-end; }
+  .filters .field { margin-bottom:0; min-width:130px; }
+
+  .empty { color: var(--muted); font-size:13px; padding: 20px 0; text-align:center; }
+
+  /* Modal */
+  .overlay {
+    display:none; position:fixed; inset:0; background: rgba(20,18,16,0.45);
+    align-items:flex-start; justify-content:center; z-index:1000; padding: 30px 16px; overflow:auto;
+  }
+  .overlay.open { display:flex; }
+  .modal {
+    background:#fff; border-radius:14px; width:100%; max-width:560px; padding:22px 24px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  }
+  .modal.wide { max-width: 760px; }
+  .modal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .modal-head h2 { margin:0; font-size:16px; }
+  .modal-close { cursor:pointer; background:none; border:none; font-size:20px; color: var(--muted); line-height:1; }
+
+  .sig-wrap { border:1px dashed var(--line); border-radius:8px; background: var(--bg-soft); }
+  canvas#sigPad { width:100%; height:150px; display:block; touch-action:none; cursor:crosshair; }
+
+  .thumb { max-width:120px; max-height:120px; border-radius:8px; border:1px solid var(--line); display:block; margin-top:6px; }
+
+  .muted { color: var(--muted); }
+  .small { font-size:12px; }
+  .kv { display:grid; grid-template-columns: 110px 1fr; gap:4px 10px; font-size:13px; margin:4px 0; }
+  .kv b { color: var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; }
+
+  .checklist-box { border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .chk-item { display:flex; align-items:center; gap:7px; font-size:13px; padding:3px 0; cursor:pointer; }
+  .chk-item-ro { font-size:13px; padding:3px 0; }
+  .item-pend { color:#a8452a; font-weight:600; }
+  .item-ok { color: var(--muted); }
+  a.order-link { color:#a8452a; font-weight:600; }
+
+  .route-group { border:1px solid var(--line); border-radius:10px; margin-bottom:14px; overflow:hidden; }
+  .route-head { background: var(--bg-soft); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+  .route-head strong { font-size:13.5px; }
+
+  /* ===== PRINT ===== */
+  #print-area { display:none; }
+  @media print {
+    body * { visibility: hidden; }
+    #print-area, #print-area * { visibility: visible; }
+    #print-area { display:block; position:absolute; left:0; top:0; width:100%; margin:0; padding:0; }
+  }
+
+  .label-page {
+    box-sizing:border-box; page-break-after: always; padding: 4mm;
+    display:flex; flex-direction:column; justify-content:flex-start;
+    font-family: -apple-system, Helvetica, Arial, sans-serif;
+  }
+  .label-page:last-child { page-break-after: auto; }
+  .label-big .lbl-code { font-size:20px; font-weight:800; letter-spacing:1px; margin-bottom:2mm; }
+  .label-big .lbl-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#555; margin-bottom:1mm;}
+  .label-big .lbl-cliente { font-size:16px; font-weight:700; margin-bottom:1mm; }
+  .label-big .lbl-line { font-size:12px; margin-bottom:1mm; }
+  .label-big .lbl-box { border:1.5px solid #000; border-radius:4px; padding:2mm 3mm; margin-top:2mm; }
+  .label-big .lbl-foot { display:flex; justify-content:space-between; margin-top:2mm; font-size:11px; font-weight:700; }
+  .label-big .lbl-brand { font-size:11px; font-weight:800; letter-spacing:2px; margin-bottom:2mm; }
+  .label-big .lbl-item { font-size:11.5px; margin-bottom:1.2mm; display:flex; align-items:flex-start; gap:1.8mm; }
+  .lbl-chk { display:inline-block; width:3.4mm; height:3.4mm; border:1.4px solid #000; flex:0 0 auto; margin-top:0.5mm; }
+  .label-big .lbl-tipo { display:inline-block; border:1.4px solid #000; border-radius:3px; padding:0.8mm 2.2mm; font-size:10px; font-weight:800; letter-spacing:0.5px; margin-bottom:2mm; }
+  .label-big .aori-logo-svg { margin-bottom: 1.5mm; }
+  .label-big .lbl-brandrow { display:flex; align-items:center; gap:3mm; margin-bottom:2mm; }
+  .label-big .lbl-brandrow .aori-logo-svg { margin-bottom:0; }
+  .label-big .lbl-slogan { font-size:11px; font-style:italic; color:#a8452a; line-height:1.15; font-weight:600; white-space:nowrap; }
+
+  .label-small { font-size:8px; }
+  .label-small .lbl-code { font-size:11px; font-weight:800; margin-bottom:1mm; }
+  .label-small .lbl-cliente { font-size:9px; font-weight:700; margin-bottom:0.5mm; }
+  .label-small .lbl-line { font-size:7.5px; margin-bottom:0.5mm; }
+  .label-small .lbl-brand { font-size:7px; font-weight:800; letter-spacing:1px; margin-bottom:1mm; }
+  .label-small .aori-logo-svg { margin-bottom: 1mm; }
+
+  .report-page { padding: 14mm; font-size:12px; }
+  .report-page h1 { font-size:18px; margin-bottom:2px; }
+  .report-page table { width:100%; border-collapse:collapse; margin-top:10px; }
+  .report-page th, .report-page td { border:1px solid #ccc; padding:6px 8px; font-size:11px; text-align:left; }
+  .report-page img.evidence { max-width:160px; max-height:160px; border:1px solid #ccc; margin-top:6px; }
+  .report-page td.firma-cell { height:18mm; vertical-align:top; }
+
+  .preview-wrap {
+    max-height:65vh; overflow:auto; background:#e9e9ea; border-radius:10px; padding:20px;
+    display:flex; flex-wrap:wrap; gap:16px; justify-content:center;
+  }
+  .preview-wrap .label-page {
+    background:#fff; box-shadow:0 3px 14px rgba(0,0,0,0.18); flex:0 0 auto;
+    page-break-after:auto !important;
+  }
+  .report-page h2.zona-title { font-size:13px; margin:16px 0 4px; }
+  .report-page table.summary td, .report-page table.summary th { text-align:center; }
+  .report-page table.summary td:first-child, .report-page table.summary th:first-child { text-align:left; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div id="loginLogoSlot" style="width:130px;margin:0 auto 14px;"></div>
+    <div class="login-title">AORI Logística</div>
+    <p class="muted small" style="text-align:center;margin:2px 0 18px;">Inicia sesión para continuar</p>
+    <form id="loginForm">
+      <div class="field"><label>Correo</label><input type="email" name="email" required autocomplete="username"></div>
+      <div class="field"><label>Contraseña</label><input type="password" name="password" required autocomplete="current-password"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">Entrar</button>
+      <div id="loginError" class="login-error" style="display:none;"></div>
+    </form>
+    <div class="login-msg">Acceso solo para el equipo de AORI.</div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+  <div class="brand">
+    <div class="brand-logo-wrap">
+      <div id="brandLogoSlot" style="width:92px;"></div>
+      <div>
+        <span class="tag">Órdenes · Etiquetas · Rutas · Entregas</span>
+        <div class="brand-slogan">Glow with intention</div>
+      </div>
+    </div>
+    <div id="userBadge" class="muted small"></div>
+    <button class="btn btn-sm" id="logoutBtn">Cerrar sesión</button>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="dashboard" class="active">Panel</button>
+    <button data-view="ordenes">Órdenes</button>
+    <button data-view="rutas">Rutas</button>
+    <button data-view="pendientes">Pendientes</button>
+    <button data-view="entregas">Entregas</button>
+    <button data-view="vendedores">Vendedores</button>
+    <button data-view="clientes">Clientas</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div class="view active" id="view-dashboard">
+    <div class="panel" style="background:var(--accent-soft);border:1px dashed var(--accent);">
+      <h2 style="margin-bottom:4px;">Migrar datos de este navegador a la nube</h2>
+      <p class="muted small" style="margin-bottom:10px;">Solo se usa una vez: sube a la nube las órdenes, zonas, vendedores y clientas que ya tenías guardadas en este navegador antes de pasarnos a Firebase. Es seguro correrlo varias veces — no duplica lo que ya está en la nube.</p>
+      <button class="btn btn-primary" id="btnMigrarDatosLocales">Migrar datos locales a la nube</button>
+    </div>
+    <div class="cards" id="dashCards"></div>
+    <div class="panel">
+      <h2>Últimas órdenes</h2>
+      <table id="dashTable"><thead><tr><th>Código</th><th>Cliente</th><th>Ruta</th><th>Estado</th><th>Fecha</th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="dashEmpty" style="display:none;">Aún no hay órdenes registradas. Ve a la pestaña "Órdenes" para crear la primera.</div>
+    </div>
+  </div>
+
+  <!-- ORDENES -->
+  <div class="view" id="view-ordenes">
+    <div class="panel">
+      <h2>Registrar nueva orden de compra</h2>
+      <form id="orderForm">
+        <div class="row">
+          <div class="field" style="flex:2;"><label>Clienta registrada (opcional — autocompleta los datos)</label><select id="clienteSelectForm"><option value="">— Nueva clienta / escribir manualmente —</option></select></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Cliente *</label><input required name="cliente" placeholder="Nombre completo"></div>
+          <div class="field"><label>Teléfono *</label><input required name="telefono" placeholder="Ej. 3001234567"></div>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:2;"><label>Dirección de entrega *</label><input required name="direccion" placeholder="Calle, número, referencia"></div>
+          <div class="field"><label>Ciudad</label><input name="ciudad" placeholder="Ciudad"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Tipo de entrega</label>
+            <select name="tipoEntrega" id="tipoEntregaSelect">
+              <option value="envio">Envío local a domicilio</option>
+              <option value="foraneo">Envío foráneo (transportadora)</option>
+              <option value="pickup">Recoge en tienda (Pickup)</option>
+            </select>
+          </div>
+          <div class="field"><label>Fecha de envío / entrega</label><input type="date" name="fechaEnvio"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Vendedor responsable</label><select name="vendedor" id="vendedorSelectForm"><option value="">Sin asignar</option></select></div>
+          <div class="field"><label>Valor de la venta ($)</label><input type="number" name="valorVenta" min="0" step="any" placeholder="0"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Ruta / Zona de envío</label><input name="ruta" list="rutaList" placeholder="Ej. Norte, Centro, Nacional - Cali"></div>
+          <datalist id="rutaList"></datalist>
+          <div class="field"><label>Tamaño de etiqueta</label>
+            <select name="tamano">
+              <option value="big">Grande 10x15cm (envío)</option>
+              <option value="small">Pequeña 5x3cm (empaque)</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" id="foraneoFields" style="display:none;">
+          <div class="field"><label>Transportadora</label><input name="transportadora" list="transpList" placeholder="Ej. Servientrega, Interrapidísimo"></div>
+          <datalist id="transpList">
+            <option value="Servientrega"><option value="Interrapidísimo"><option value="Coordinadora">
+            <option value="Envía"><option value="TCC"><option value="Deprisa">
+          </datalist>
+          <div class="field"><label>Número de guía</label><input name="numeroGuia" placeholder="Ej. 123456789"></div>
+          <div class="field"><label>Costo de la guía ($)</label><input type="number" name="costoGuia" min="0" step="any" placeholder="0"></div>
+          <div class="field"><label>Foto de la guía / recibo</label>
+            <input type="file" accept="image/*" capture="environment" id="guiaFotoInput">
+            <img id="guiaFotoPreview" class="thumb" style="display:none;">
+          </div>
+        </div>
+        <div class="field"><label>Contenido / productos del pedido * — un producto por línea (se marcará con un cuadro para palomear al empacar)</label><textarea required name="contenido" placeholder="2 blusas talla M&#10;1 pantalón talla 32&#10;1 par de aretes"></textarea></div>
+        <div class="field"><label>Notas internas</label><textarea name="notas" placeholder="Notas de empaque, pago, instrucciones..."></textarea></div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary">Guardar orden</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Todas las órdenes</h2>
+      <div class="filters">
+        <div class="field">
+          <label>Estado</label>
+          <select id="fEstado">
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="aprobado">Aprobado</option>
+            <option value="empacado">Empacado</option>
+            <option value="en_ruta">En ruta</option>
+            <option value="entregado">Entregado</option>
+          </select>
+        </div>
+        <div class="field"><label>Tipo</label>
+          <select id="fTipo">
+            <option value="">Todos</option>
+            <option value="envio">Envío local</option>
+            <option value="foraneo">Envío foráneo</option>
+            <option value="pickup">Pickup</option>
+          </select>
+        </div>
+        <div class="field"><label>Ruta</label><select id="fRuta"><option value="">Todas</option></select></div>
+        <div class="field"><label>Vendedor</label><select id="fVendedor"><option value="">Todos</option></select></div>
+        <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente o código"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:24px;"><input type="checkbox" id="selAll"></th>
+          <th>Código</th><th>Cliente</th><th>Tipo</th><th>Ruta</th><th>Envío</th><th>Estado</th><th>Acciones</th>
+        </tr></thead>
+        <tbody id="ordersTbody"></tbody>
+      </table>
+      <div class="empty" id="ordersEmpty" style="display:none;">No hay órdenes que coincidan con el filtro.</div>
+    </div>
+  </div>
+
+  <!-- RUTAS -->
+  <div class="view" id="view-rutas">
+    <div class="panel">
+      <h2>Zonas de envío</h2>
+      <p class="muted small">Carga aquí las zonas que usas (barrios, ciudades, "Nacional") para que aparezcan en el formulario de órdenes y en los filtros aunque todavía no tengas pedidos con esa zona.</p>
+      <div class="row">
+        <div class="field" style="flex:2;"><label>Nueva zona</label><input id="nuevaZonaInput" placeholder="Ej. Norte, Centro, Nacional - Cali"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" id="btnAddZona">Agregar zona</button></div>
+      </div>
+      <div id="zonaList" class="btn-row"></div>
+      <div class="empty" id="zonaEmpty" style="display:none;">Aún no has cargado zonas. Agrega las que usas para envíos.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Reporte de paquetes por zona / pickup</h2>
+      <p class="muted small">Marca las zonas que quieres incluir en el reporte (incluye totales por estado y costos de guías de envíos foráneos).</p>
+      <div id="reportZonaChecks" class="btn-row"></div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-sm" id="btnZonaAll">Seleccionar todas</button>
+        <button class="btn btn-sm" id="btnZonaNone">Ninguna</button>
+        <button class="btn btn-primary" id="btnReportZona">Generar reporte</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Rutas de envío</h2>
+      <p class="muted small">Las órdenes se agrupan por "Ruta / Zona"; los pickups se agrupan aparte, sin importar la ruta. Desde aquí puedes imprimir la hoja de ruta con espacio de firma.</p>
+      <div class="filters" style="align-items:center;">
+        <label class="small" style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="rutasSoloAprobadas" checked> Solo aprobadas o más avanzadas (oculta pendientes)</label>
+        <select id="rutasZonaFiltro"><option value="">Todas las zonas</option></select>
+        <button class="btn btn-primary" id="btnPrintAllRoutes">Imprimir todas las rutas</button>
+      </div>
+      <div id="rutasContainer"></div>
+      <div class="empty" id="rutasEmpty" style="display:none;">No hay órdenes que coincidan con los filtros seleccionados.</div>
+    </div>
+  </div>
+
+  <!-- PENDIENTES -->
+  <div class="view" id="view-pendientes">
+    <div class="panel">
+      <h2>Productos pendientes por surtir</h2>
+      <p class="muted small">Órdenes en estado "Pendiente" — incluye tanto pedidos nuevos sin aprobar como los generados automáticamente por productos que faltaron al empacar. Útil para saber qué cubrir cuando llegue inventario nuevo.</p>
+      <div class="filters" style="align-items:flex-end;">
+        <div class="field"><label>Filtrar por clienta</label><select id="pendClienteFiltro"><option value="">Todas las clientas</option></select></div>
+        <button class="btn btn-primary" id="btnPrintPendientes">Imprimir reporte</button>
+      </div>
+      <div id="pendResumenBox"></div>
+      <div id="pendDetalleBox"></div>
+      <div class="empty" id="pendEmpty" style="display:none;">No hay productos pendientes por surtir en este momento.</div>
+    </div>
+  </div>
+
+  <!-- ENTREGAS -->
+  <div class="view" id="view-entregas">
+    <div class="panel">
+      <h2>Entregas confirmadas</h2>
+      <table>
+        <thead><tr><th>Código</th><th>Cliente</th><th>Recibió</th><th>Fecha</th><th>Evidencia</th><th>Acciones</th></tr></thead>
+        <tbody id="entregasTbody"></tbody>
+      </table>
+      <div class="empty" id="entregasEmpty" style="display:none;">Todavía no hay entregas registradas.</div>
+    </div>
+  </div>
+
+  <!-- VENDEDORES -->
+  <div class="view" id="view-vendedores">
+    <div class="panel">
+      <h2>Vendedores</h2>
+      <p class="muted small">Carga aquí a las personas que venden, para poder asignarlas a cada orden y sacar estadísticas de ventas.</p>
+      <div class="row">
+        <div class="field" style="flex:2;"><label>Nuevo vendedor</label><input id="nuevoVendedorInput" placeholder="Nombre del vendedor"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" id="btnAddVendedor">Agregar vendedor</button></div>
+      </div>
+      <div id="vendedorList" class="btn-row"></div>
+      <div class="empty" id="vendedorEmpty" style="display:none;">Aún no has cargado vendedores.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Estadísticas de ventas</h2>
+      <p class="muted small">Calculadas sobre la fecha en que se registró cada orden. Filtra por rango de fechas si quieres un corte específico (ej. un mes).</p>
+      <div class="filters">
+        <div class="field"><label>Desde</label><input type="date" id="ventasDesde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="ventasHasta"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFechasVentas">Limpiar</button></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" id="btnReportVentas">Imprimir reporte</button></div>
+      </div>
+      <table>
+        <thead><tr><th>Vendedor</th><th>Órdenes</th><th>Entregadas</th><th>Efectividad</th><th>Valor total ventas</th></tr></thead>
+        <tbody id="vendedorStatsTbody"></tbody>
+      </table>
+      <div class="empty" id="vendedorStatsEmpty" style="display:none;">No hay órdenes en el rango seleccionado.</div>
+    </div>
+  </div>
+
+  <!-- CLIENTAS -->
+  <div class="view" id="view-clientes">
+    <div class="panel">
+      <h2 id="clienteFormTitle">Registrar clienta</h2>
+      <p class="muted small">Guarda aquí a tus clientas para elegirlas desde un solo clic al crear una orden, en vez de escribir sus datos cada vez. Si registras una orden con una clienta nueva, se guarda aquí automáticamente.</p>
+      <form id="clienteForm">
+        <input type="hidden" name="clienteId">
+        <div class="row">
+          <div class="field"><label>Nombre *</label><input required name="nombre" placeholder="Nombre completo"></div>
+          <div class="field"><label>Teléfono *</label><input required name="telefono" placeholder="Ej. 3001234567"></div>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:2;"><label>Dirección</label><input name="direccion" placeholder="Calle, número, referencia"></div>
+          <div class="field"><label>Ciudad</label><input name="ciudad" placeholder="Ciudad"></div>
+          <div class="field"><label>Ruta / Zona de envío</label><input name="ruta" list="rutaList" placeholder="Ej. Norte, Centro, Nacional - Cali"></div>
+        </div>
+        <div class="field"><label>Notas (tallas, preferencias, etc.)</label><textarea name="notas" placeholder="Ej. talla M, le gustan los tonos tierra..."></textarea></div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary" id="btnGuardarCliente">Guardar clienta</button>
+          <button type="button" class="btn" id="btnCancelarEdicionCliente" style="display:none;">Cancelar edición</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Clientas registradas</h2>
+      <div class="filters">
+        <div class="field"><label>Buscar</label><input id="fClienteBusca" placeholder="Nombre o teléfono"></div>
+      </div>
+      <table>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Ruta</th><th>Órdenes</th><th>Acciones</th></tr></thead>
+        <tbody id="clientesTbody"></tbody>
+      </table>
+      <div class="empty" id="clientesEmpty" style="display:none;">Aún no has cargado clientas.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ver / Editar orden -->
+<div class="overlay" id="ovOrder">
+  <div class="modal wide">
+    <div class="modal-head"><h2 id="ovOrderTitle">Orden</h2><button class="modal-close" data-close="ovOrder">✕</button></div>
+    <div id="ovOrderBody"></div>
+  </div>
+</div>
+
+<!-- Modal: Registrar entrega -->
+<div class="overlay" id="ovDelivery">
+  <div class="modal">
+    <div class="modal-head"><h2>Registrar evidencia de entrega</h2><button class="modal-close" data-close="ovDelivery">✕</button></div>
+    <form id="deliveryForm">
+      <input type="hidden" name="orderId">
+      <div class="field"><label>Nombre de quien recibe *</label><input required name="receptor" placeholder="Nombre de la persona que recibió"></div>
+      <div class="field">
+        <label>Firma de quien recibe</label>
+        <div class="sig-wrap"><canvas id="sigPad"></canvas></div>
+        <div class="btn-row"><button type="button" class="btn btn-sm" id="clearSig">Borrar firma</button></div>
+      </div>
+      <div class="field">
+        <label>Foto del paquete entregado</label>
+        <input type="file" accept="image/*" capture="environment" id="deliveryPhoto">
+        <img id="deliveryPhotoPreview" class="thumb" style="display:none;">
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button type="submit" class="btn btn-primary">Guardar entrega</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Ver evidencia -->
+<div class="overlay" id="ovEvidence">
+  <div class="modal">
+    <div class="modal-head"><h2>Evidencia de entrega</h2><button class="modal-close" data-close="ovEvidence">✕</button></div>
+    <div id="ovEvidenceBody"></div>
+  </div>
+</div>
+
+<!-- Modal: Vista previa de etiquetas -->
+<div class="overlay" id="ovPreview">
+  <div class="modal wide">
+    <div class="modal-head"><h2>Vista previa de etiqueta(s)</h2><button class="modal-close" data-close="ovPreview">✕</button></div>
+    <p class="muted small">Así se verá cada etiqueta. Revisa los datos y luego imprime directo a tu impresora térmica.</p>
+    <div id="previewBody" class="preview-wrap"></div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" id="btnPrintFromPreview">Imprimir</button>
+      <button class="btn" data-close="ovPreview">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="print-area"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  var firebaseConfig = {
+    apiKey: "AIzaSyBW0o7GLaxP3PM7TkcobKYhjQsAzkknHVk",
+    authDomain: "aori-logistica.firebaseapp.com",
+    projectId: "aori-logistica",
+    storageBucket: "aori-logistica.firebasestorage.app",
+    messagingSenderId: "477833161441",
+    appId: "1:477833161441:web:ef7f38bc52616454465a0"
+  };
+  firebase.initializeApp(firebaseConfig);
+  var auth = firebase.auth();
+  var db = firebase.firestore();
+  db.enablePersistence({ synchronizeTabs: true }).catch(function(){ /* varias pestañas o navegador sin soporte: seguimos sin cache offline */ });
+
+  var loginForm = document.getElementById("loginForm");
+  var loginError = document.getElementById("loginError");
+  loginForm.addEventListener("submit", function(e){
+    e.preventDefault();
+    loginError.style.display = "none";
+    var email = loginForm.email.value.trim();
+    var pass = loginForm.password.value;
+    var btn = loginForm.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = "Entrando...";
+    auth.signInWithEmailAndPassword(email, pass).catch(function(err){
+      loginError.textContent = (err && err.code === "auth/invalid-credential")
+        ? "Correo o contraseña incorrectos."
+        : "No se pudo iniciar sesión (" + (err && err.code || "error") + "). Revisa tu conexión.";
+      loginError.style.display = "block";
+    }).finally(function(){
+      btn.disabled = false;
+      btn.textContent = "Entrar";
+    });
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    auth.signOut();
+  });
+
+  auth.onAuthStateChanged(function(user){
+    if (user) {
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      var badge = document.getElementById("userBadge");
+      if (badge) badge.textContent = user.email || "";
+      loginForm.reset();
+      if (window.__aoriStartSync) window.__aoriStartSync();
+    } else {
+      document.getElementById("app").style.display = "none";
+      document.getElementById("loginScreen").style.display = "flex";
+      if (window.__aoriStopSync) window.__aoriStopSync();
+    }
+  });
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Logo AORI (vectorial, subido por Karen) ----------
+  var AORI_LOGO_INNER = '<defs><g/><clipPath id="4704bec03d"><rect x="0" width="508" y="0" height="572"/></clipPath><clipPath id="19212d64bf"><rect x="0" width="340" y="0" height="71"/></clipPath><clipPath id="f66498b254"><path d="M 8 225 L 407.441406 225 L 407.441406 476 L 8 476 Z M 8 225 " clip-rule="nonzero"/></clipPath><clipPath id="7f3e2cc682"><rect x="0" width="408" y="0" height="650"/></clipPath></defs><g transform="matrix(1, 0, 0, 1, 633, 119)"><g clip-path="url(#4704bec03d)"><g fill="#000000" fill-opacity="1"><g transform="translate(0.241556, 427.953694)"><g><path d="M 128.625 3.671875 C 106.84375 3.671875 87.238281 -1.15625 69.8125 -10.8125 C 52.394531 -20.476562 38.71875 -34.15625 28.78125 -51.84375 C 18.84375 -69.539062 13.875 -89.960938 13.875 -113.109375 C 13.875 -136.242188 18.976562 -156.65625 29.1875 -174.34375 C 39.394531 -192.039062 53.347656 -205.71875 71.046875 -215.375 C 88.742188 -225.039062 108.476562 -229.875 130.25 -229.875 C 152.03125 -229.875 171.765625 -225.039062 189.453125 -215.375 C 207.148438 -205.71875 221.101562 -192.039062 231.3125 -174.34375 C 241.519531 -156.65625 246.625 -136.242188 246.625 -113.109375 C 246.625 -89.960938 241.382812 -69.539062 230.90625 -51.84375 C 220.425781 -34.15625 206.269531 -20.476562 188.4375 -10.8125 C 170.601562 -1.15625 150.664062 3.671875 128.625 3.671875 Z M 128.625 -46.140625 C 138.96875 -46.140625 148.695312 -48.65625 157.8125 -53.6875 C 166.925781 -58.726562 174.207031 -66.285156 179.65625 -76.359375 C 185.101562 -86.429688 187.828125 -98.679688 187.828125 -113.109375 C 187.828125 -134.609375 182.175781 -151.140625 170.875 -162.703125 C 159.582031 -174.273438 145.769531 -180.0625 129.4375 -180.0625 C 113.101562 -180.0625 99.421875 -174.273438 88.390625 -162.703125 C 77.367188 -151.140625 71.859375 -134.609375 71.859375 -113.109375 C 71.859375 -91.597656 77.234375 -75.054688 87.984375 -63.484375 C 98.742188 -51.921875 112.289062 -46.140625 128.625 -46.140625 Z M 128.625 -46.140625 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(249.314499, 427.953694)"><g><path d="M 85.34375 -191.09375 C 92.6875 -203.070312 102.28125 -212.460938 114.125 -219.265625 C 125.96875 -226.066406 139.507812 -229.46875 154.75 -229.46875 L 154.75 -169.453125 L 139.640625 -169.453125 C 121.671875 -169.453125 108.128906 -165.234375 99.015625 -156.796875 C 89.898438 -148.359375 85.34375 -133.65625 85.34375 -112.6875 L 85.34375 0 L 28.171875 0 L 28.171875 -226.203125 L 85.34375 -226.203125 Z M 85.34375 -191.09375 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(402.841414, 427.953694)"><g><path d="M 57.15625 -253.15625 C 47.09375 -253.15625 38.722656 -256.351562 32.046875 -262.75 C 25.378906 -269.144531 22.046875 -277.109375 22.046875 -286.640625 C 22.046875 -296.160156 25.378906 -304.117188 32.046875 -310.515625 C 38.722656 -316.910156 47.09375 -320.109375 57.15625 -320.109375 C 67.226562 -320.109375 75.597656 -316.910156 82.265625 -310.515625 C 88.941406 -304.117188 92.28125 -296.160156 92.28125 -286.640625 C 92.28125 -277.109375 88.941406 -269.144531 82.265625 -262.75 C 75.597656 -256.351562 67.226562 -253.15625 57.15625 -253.15625 Z M 85.34375 -226.203125 L 85.34375 0 L 28.171875 0 L 28.171875 -226.203125 Z M 85.34375 -226.203125 "/></g></g></g></g></g><g transform="matrix(1, 0, 0, 1, 578, 578)"><g clip-path="url(#19212d64bf)"><g fill="#000000" fill-opacity="1"><g transform="translate(0.743624, 49.637537)"><g><path d="M 45.765625 0 L 31.140625 0 L 14 -19.75 L 14 0 L 3.390625 0 L 3.390625 -46.546875 L 14 -46.546875 L 14 -27.53125 L 29.953125 -46.546875 L 42.828125 -46.546875 L 24.09375 -24.484375 Z M 45.765625 0 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(45.752218, 49.637537)"><g/></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(61.77047, 49.637537)"><g><path d="M 3.390625 -20.65625 L 21.546875 -20.65625 L 21.546875 -12.015625 L 3.390625 -12.015625 Z M 3.390625 -20.65625 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(87.320567, 49.637537)"><g/></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(103.338819, 49.637537)"><g><path d="M 3.390625 -46.546875 L 17.828125 -46.546875 C 22.191406 -46.546875 25.671875 -45.613281 28.265625 -43.75 C 30.859375 -41.894531 32.15625 -38.878906 32.15625 -34.703125 C 32.15625 -30.035156 30.21875 -26.707031 26.34375 -24.71875 C 32.96875 -23.550781 36.28125 -19.640625 36.28125 -12.984375 C 36.28125 -9.066406 34.925781 -5.921875 32.21875 -3.546875 C 29.507812 -1.179688 25.785156 0 21.046875 0 L 3.390625 0 Z M 14 -28.328125 L 14.84375 -28.328125 C 17.207031 -28.328125 18.972656 -28.738281 20.140625 -29.5625 C 21.304688 -30.394531 21.890625 -31.75 21.890625 -33.625 C 21.890625 -36.78125 19.539062 -38.359375 14.84375 -38.359375 L 14 -38.359375 Z M 14 -8.1875 L 17.328125 -8.1875 C 22.515625 -8.1875 25.109375 -9.914062 25.109375 -13.375 C 25.109375 -15.4375 24.457031 -16.921875 23.15625 -17.828125 C 21.863281 -18.734375 19.921875 -19.1875 17.328125 -19.1875 L 14 -19.1875 Z M 14 -8.1875 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(141.522835, 49.637537)"><g><path d="M 30.015625 -46.546875 L 30.015625 -37.234375 L 14 -37.234375 L 14 -27.984375 L 29.34375 -27.984375 L 29.34375 -18.671875 L 14 -18.671875 L 14 -9.3125 L 30.015625 -9.3125 L 30.015625 0 L 3.390625 0 L 3.390625 -46.546875 Z M 30.015625 -46.546875 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(175.194824, 49.637537)"><g><path d="M 27.03125 -46.546875 L 45.8125 0 L 34.421875 0 L 30.96875 -9.3125 L 13.265625 -9.3125 L 9.8125 0 L -1.578125 0 L 17.203125 -46.546875 Z M 27.359375 -18.625 L 22.171875 -32.15625 L 22.0625 -32.15625 L 16.875 -18.625 Z M 27.359375 -18.625 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(220.034223, 49.637537)"><g><path d="M 39.15625 -46.546875 L 39.15625 -16.53125 C 39.15625 -10.8125 37.613281 -6.484375 34.53125 -3.546875 C 31.445312 -0.617188 26.929688 0.84375 20.984375 0.84375 C 15.046875 0.84375 10.535156 -0.617188 7.453125 -3.546875 C 4.367188 -6.484375 2.828125 -10.8125 2.828125 -16.53125 L 2.828125 -46.546875 L 13.421875 -46.546875 L 13.421875 -19.640625 C 13.421875 -15.878906 14.015625 -13.265625 15.203125 -11.796875 C 16.390625 -10.328125 18.316406 -9.59375 20.984375 -9.59375 C 23.660156 -9.59375 25.585938 -10.328125 26.765625 -11.796875 C 27.953125 -13.265625 28.546875 -15.878906 28.546875 -19.640625 L 28.546875 -46.546875 Z M 39.15625 -46.546875 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(259.909651, 49.637537)"><g><path d="M 0.453125 -37.234375 L 0.453125 -46.546875 L 33.171875 -46.546875 L 33.171875 -37.234375 L 22.125 -37.234375 L 22.125 0 L 11.515625 0 L 11.515625 -37.234375 Z M 0.453125 -37.234375 "/></g></g></g><g fill="#000000" fill-opacity="1"><g transform="translate(294.145565, 49.637537)"><g><path d="M -1.6875 -46.546875 L 11.0625 -46.546875 L 20.765625 -31.65625 L 30.46875 -46.546875 L 43.21875 -46.546875 L 26.0625 -20.875 L 26.0625 0 L 15.453125 0 L 15.453125 -20.875 Z M -1.6875 -46.546875 "/></g></g></g></g></g><g transform="matrix(1, 0, 0, 1, 296, 79)"><g clip-path="url(#7f3e2cc682)"><g clip-path="url(#f66498b254)"><g fill="#000000" fill-opacity="1"><g transform="translate(0.328888, 471.548882)"><g><path d="M 233.6875 4.4375 C 217.070312 4.4375 203.039062 0.00390625 191.59375 -8.859375 C 180.15625 -17.722656 174.4375 -31.195312 174.4375 -49.28125 C 174.4375 -54.445312 174.988281 -60.171875 176.09375 -66.453125 C 156.53125 -43.929688 137.425781 -26.671875 118.78125 -14.671875 C 100.132812 -2.671875 80.289062 3.328125 59.25 3.328125 C 43.007812 3.328125 30.457031 -1.378906 21.59375 -10.796875 C 12.738281 -20.210938 8.3125 -33.78125 8.3125 -51.5 C 8.3125 -65.15625 11.078125 -79.550781 16.609375 -94.6875 C 22.148438 -109.820312 29.71875 -124.585938 39.3125 -138.984375 C 48.914062 -153.390625 59.992188 -167.050781 72.546875 -179.96875 C 85.097656 -192.882812 98.203125 -204.234375 111.859375 -214.015625 C 125.515625 -223.804688 139.445312 -231.5625 153.65625 -237.28125 C 167.875 -243 181.441406 -245.859375 194.359375 -245.859375 C 208.390625 -245.859375 220.296875 -242.90625 230.078125 -237 C 239.859375 -231.09375 248.257812 -222.789062 255.28125 -212.09375 L 217.0625 -191.59375 C 214.113281 -195.289062 210.515625 -198.335938 206.265625 -200.734375 C 202.023438 -203.128906 196.582031 -204.328125 189.9375 -204.328125 C 181.445312 -204.328125 172.21875 -201.832031 162.25 -196.84375 C 152.28125 -191.863281 142.21875 -185.222656 132.0625 -176.921875 C 121.914062 -168.617188 112.039062 -159.296875 102.4375 -148.953125 C 92.84375 -138.617188 84.257812 -128.097656 76.6875 -117.390625 C 69.125 -106.691406 63.125 -96.265625 58.6875 -86.109375 C 54.257812 -75.953125 52.046875 -67 52.046875 -59.25 C 52.046875 -52.976562 53.519531 -47.898438 56.46875 -44.015625 C 59.425781 -40.140625 64.226562 -38.203125 70.875 -38.203125 C 79 -38.203125 89.0625 -42.265625 101.0625 -50.390625 C 113.0625 -58.515625 125.425781 -69.21875 138.15625 -82.5 C 150.894531 -95.789062 163.539062 -110.832031 176.09375 -127.625 C 188.644531 -144.425781 199.90625 -161.691406 209.875 -179.421875 L 249.734375 -161.140625 L 237 -130.6875 C 231.832031 -118.5 227.3125 -106.773438 223.4375 -95.515625 C 219.5625 -84.253906 217.625 -74.9375 217.625 -67.5625 C 217.625 -47.988281 227.222656 -38.203125 246.421875 -38.203125 C 254.910156 -38.203125 264.140625 -40.878906 274.109375 -46.234375 C 284.078125 -51.585938 294.691406 -59.15625 305.953125 -68.9375 C 317.210938 -78.71875 328.835938 -90.53125 340.828125 -104.375 C 352.828125 -118.21875 364.921875 -133.632812 377.109375 -150.625 L 407 -122.375 C 393.34375 -104.289062 379.6875 -87.492188 366.03125 -71.984375 C 352.375 -56.484375 338.4375 -43.101562 324.21875 -31.84375 C 310.007812 -20.582031 295.425781 -11.71875 280.46875 -5.25 C 265.519531 1.207031 249.925781 4.4375 233.6875 4.4375 Z M 233.6875 4.4375 "/></g></g></g></g></g></g>';
+  var __logoUidCounter = 0;
+  function aoriLogoSvg(width, colorHex){
+    var uid = "lg" + (++__logoUidCounter);
+    var svg = AORI_LOGO_INNER
+      .split("4704bec03d").join("4704bec03d-" + uid)
+      .split("19212d64bf").join("19212d64bf-" + uid)
+      .split("f66498b254").join("f66498b254-" + uid)
+      .split("7f3e2cc682").join("7f3e2cc682-" + uid);
+    return '<svg class="aori-logo-svg" viewBox="0 0 1440 810" xmlns="http://www.w3.org/2000/svg" ' +
+      'style="width:' + width + ';height:auto;color:' + (colorHex || "#000000") + ';">' + svg + '</svg>';
+  }
+  function docHeaderHtml(subtitle){
+    return '<div class="doc-header">' +
+      aoriLogoSvg('120px', '#000000') +
+      '<div class="doc-header-text">' +
+        '<div class="doc-header-title">' + esc(subtitle) + '</div>' +
+        '<div class="doc-header-slogan">Glow with intention</div>' +
+      '</div>' +
+    '</div>';
+  }
+  // Estas claves solo se usan para leer lo que ya había guardado en este navegador
+  // (localStorage) y poder migrarlo a la nube una sola vez. Ya no se escribe aquí.
+  var STORE_KEY = "aori_logistica_v1";
+  var SEQ_KEY = "aori_logistica_seq_v1";
+  var ZONAS_KEY = "aori_logistica_zonas_v1";
+  var VENDEDORES_KEY = "aori_logistica_vendedores_v1";
+  var CLIENTES_KEY = "aori_logistica_clientes_v1";
+
+  // Convierte "contenido" (texto libre, un producto por línea) en items de checklist.
+  // migrando: true = orden ya existente antes de esta función (se asume ya surtida por completo).
+  // migrando: false = orden nueva (aún no se ha empacado nada).
+  function itemsFromContenido(contenido, migrando){
+    return String(contenido || "").split("\n").map(function(l){ return l.trim(); }).filter(Boolean)
+      .map(function(t){ return { texto: t, surtido: !!migrando }; });
+  }
+  function ensureOrderItems(o){
+    if (!Array.isArray(o.items)) o.items = itemsFromContenido(o.contenido, true);
+    if (o.origenOrdenId === undefined) o.origenOrdenId = null;
+    if (o.origenOrdenCode === undefined) o.origenOrdenCode = null;
+    if (o.derivadaOrdenId === undefined) o.derivadaOrdenId = null;
+    if (o.derivadaOrdenCode === undefined) o.derivadaOrdenCode = null;
+    return o;
+  }
+  // Recalcula el texto plano "contenido" a partir de items (fuente de verdad para checklist).
+  function syncContenidoFromItems(o){
+    o.contenido = o.items.map(function(it){ return it.texto; }).join("\n");
+  }
+  // Al editar el texto libre a mano, intenta conservar el estado surtido/no-surtido
+  // de los renglones que no cambiaron, y marca como no-surtidas las líneas nuevas.
+  function rebuildItemsPreserving(oldItems, newContenidoText){
+    var prevByText = {};
+    (oldItems || []).forEach(function(it){ prevByText[it.texto] = it.surtido; });
+    return String(newContenidoText || "").split("\n").map(function(l){ return l.trim(); }).filter(Boolean)
+      .map(function(t){ return { texto: t, surtido: prevByText.hasOwnProperty(t) ? prevByText[t] : false }; });
+  }
+
+  // ---------- Persistencia en la nube (Firestore) ----------
+  // "orders" es una colección real (un documento por orden) para que varias personas
+  // puedan editar órdenes distintas al mismo tiempo sin pisarse los cambios.
+  // "catalogos/data" guarda zonas/vendedores/clientas juntos en un solo documento,
+  // porque se editan poco y así es más simple.
+  var CATALOGOS_DOC = "data";
+
+  function saveOrder(o){
+    ensureOrderItems(o);
+    return db.collection("orders").doc(o.id).set(o).catch(function(err){
+      console.error("No se pudo guardar la orden en la nube:", err);
+      alert("No se pudo guardar la orden (revisa tu conexión a internet). Vuelve a intentarlo.");
+      throw err;
+    });
+  }
+  function deleteOrderDoc(id){
+    return db.collection("orders").doc(id).delete().catch(function(err){
+      console.error("No se pudo eliminar la orden en la nube:", err);
+      alert("No se pudo eliminar la orden (revisa tu conexión a internet).");
+      throw err;
+    });
+  }
+  // Número de orden único y consecutivo (AORI-2026-0001, 0002, ...), generado con una
+  // transacción para que dos personas creando órdenes al mismo tiempo no repitan número.
+  function genCode(){
+    var y = new Date().getFullYear();
+    var counterRef = db.collection("counters").doc("orders_" + y);
+    return db.runTransaction(function(tx){
+      return tx.get(counterRef).then(function(snap){
+        var n = (snap.exists ? (snap.data().seq || 0) : 0) + 1;
+        tx.set(counterRef, { seq: n });
+        return "AORI-" + y + "-" + String(n).padStart(4, "0");
+      });
+    });
+  }
+
+  function saveZonas(list){
+    return db.collection("catalogos").doc(CATALOGOS_DOC).set({ zonas: list }, { merge: true }).catch(function(err){
+      console.error("No se pudieron guardar las zonas:", err);
+      alert("No se pudieron guardar las zonas (revisa tu conexión).");
+    });
+  }
+  function saveVendedores(list){
+    return db.collection("catalogos").doc(CATALOGOS_DOC).set({ vendedores: list }, { merge: true }).catch(function(err){
+      console.error("No se pudieron guardar los vendedores:", err);
+      alert("No se pudieron guardar los vendedores (revisa tu conexión).");
+    });
+  }
+  function saveClientes(list){
+    return db.collection("catalogos").doc(CATALOGOS_DOC).set({ clientes: list }, { merge: true }).catch(function(err){
+      console.error("No se pudieron guardar las clientas:", err);
+      alert("No se pudieron guardar las clientas (revisa tu conexión).");
+    });
+  }
+
+  var orders = [];
+  var zonas = [];
+  var vendedores = [];
+  var clientes = [];
+  var reportZonaSelected = null;
+
+  // Lee lo que Karen ya tenía guardado en ESTE navegador antes de pasarse a la nube,
+  // para el botón de migración de datos (ver más abajo, junto a "Clientas").
+  function readLocalLegacyData(){
+    function safeParse(key){
+      try { return JSON.parse(localStorage.getItem(key) || "[]"); }
+      catch(e){ return []; }
+    }
+    var legacyOrders = safeParse(STORE_KEY);
+    legacyOrders.forEach(ensureOrderItems);
+    return {
+      orders: legacyOrders,
+      zonas: safeParse(ZONAS_KEY),
+      vendedores: safeParse(VENDEDORES_KEY),
+      clientes: safeParse(CLIENTES_KEY)
+    };
+  }
+
+  function fmtMoney(n){
+    var v = Math.round(Number(n || 0));
+    return "$" + v.toLocaleString('es-CO');
+  }
+
+  function fmtDate(iso){
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString('es-CO', {day:'2-digit', month:'2-digit', year:'numeric'}) + " " +
+           d.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+  }
+
+  function estadoLabel(e){
+    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
+  }
+  // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a empacarse.
+  var ESTADO_STEPS = [
+    { key: "pendiente", label: "Pendiente" },
+    { key: "aprobado", label: "Aprobado" },
+    { key: "empacado", label: "Empacado" },
+    { key: "en_ruta", label: "En ruta" },
+    { key: "entregado", label: "Entregado" }
+  ];
+  // Texto del botón que avanza a la SIGUIENTE etapa, según la etapa actual.
+  function nextActionLabel(estado){
+    return {
+      pendiente: "Aprobar surtimiento",
+      aprobado: "Iniciar empaquetado",
+      empacado: "Marcar en ruta",
+      en_ruta: "Marcar entregado"
+    }[estado] || "Avanzar estado";
+  }
+  function buildEstadoStepper(estado){
+    var idx = ESTADO_FLOW.indexOf(estado);
+    return '<div class="stepper">' + ESTADO_STEPS.map(function(s, i){
+      var state = i < idx ? "done" : (i === idx ? "current" : "todo");
+      var lineClass = i < idx ? "line-done" : "";
+      return '<div class="step step-'+state+'">' +
+        '<div class="step-dot">'+(state === "done" ? "✓" : (i+1))+'</div>' +
+        '<div class="step-label">'+esc(s.label)+'</div>' +
+        '<div class="step-line '+lineClass+'"></div>' +
+      '</div>';
+    }).join("") + '</div>';
+  }
+
+  function tipoLabel(t){
+    if (t === "pickup") return "Pickup";
+    if (t === "foraneo") return "Envío foráneo";
+    return "Envío local";
+  }
+  function tipoBadgeClass(t){
+    if (t === "pickup") return "pickup";
+    if (t === "foraneo") return "foraneo";
+    return "envio";
+  }
+
+  function fmtDateOnly(ymd){
+    if (!ymd) return "";
+    var parts = ymd.split("-");
+    if (parts.length !== 3) return ymd;
+    return parts[2] + "/" + parts[1] + "/" + parts[0];
+  }
+
+  function getGroupKey(o){
+    return (o.tipoEntrega === "pickup") ? "Recoge en tienda (Pickup)" : (o.ruta || "Sin asignar");
+  }
+
+  function changeTipo(o, newTipo, onDone){
+    if (!newTipo || o.tipoEntrega === newTipo) return;
+    if (!o.tipoHistorial) o.tipoHistorial = [];
+    o.tipoHistorial.push({ fecha: new Date().toISOString(), de: o.tipoEntrega || "envio", a: newTipo });
+    o.tipoEntrega = newTipo;
+    saveOrder(o);
+    renderAll();
+    if (onDone) onDone();
+  }
+
+  // ---------- Navigation ----------
+  var tabsEl = document.getElementById("tabs");
+  tabsEl.addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-view]");
+    if (!btn) return;
+    Array.prototype.forEach.call(tabsEl.querySelectorAll("button"), function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    Array.prototype.forEach.call(document.querySelectorAll(".view"), function(v){ v.classList.remove("active"); });
+    document.getElementById("view-" + btn.dataset.view).classList.add("active");
+    renderAll();
+  });
+
+  // ---------- Overlays ----------
+  document.addEventListener("click", function(e){
+    var closeBtn = e.target.closest("[data-close]");
+    if (closeBtn) { document.getElementById(closeBtn.dataset.close).classList.remove("open"); }
+    if (e.target.classList.contains("overlay")) { e.target.classList.remove("open"); }
+  });
+  function openOverlay(id){ document.getElementById(id).classList.add("open"); }
+
+  // ---------- New order form ----------
+  document.getElementById("orderForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var f = e.target;
+    var submitBtn = f.querySelector('button[type=submit]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Guardando..."; }
+    genCode().then(function(code){
+      var o = {
+        id: "o_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        code: code,
+        createdAt: new Date().toISOString(),
+        cliente: f.cliente.value.trim(),
+        telefono: f.telefono.value.trim(),
+        direccion: f.direccion.value.trim(),
+        ciudad: f.ciudad.value.trim(),
+        ruta: f.ruta.value.trim(),
+        contenido: f.contenido.value.trim(),
+        notas: f.notas.value.trim(),
+        tamano: f.tamano.value,
+        tipoEntrega: f.tipoEntrega.value || "envio",
+        fechaEnvio: f.fechaEnvio.value || "",
+        vendedor: f.vendedor.value || "",
+        valorVenta: parseFloat(f.valorVenta.value) || 0,
+        tipoHistorial: [],
+        guia: f.tipoEntrega.value === "foraneo" ? {
+          transportadora: f.transportadora.value.trim(),
+          numero: f.numeroGuia.value.trim(),
+          costo: parseFloat(f.costoGuia.value) || 0,
+          fotoDataUrl: pendingGuiaFotoDataUrl
+        } : null,
+        estado: "pendiente",
+        entrega: null,
+        items: itemsFromContenido(f.contenido.value.trim(), false),
+        origenOrdenId: null,
+        origenOrdenCode: null,
+        derivadaOrdenId: null,
+        derivadaOrdenCode: null
+      };
+      o.clienteId = findOrCreateCliente(o.cliente, o.telefono, o.direccion, o.ciudad, o.ruta);
+      orders.unshift(o);
+      renderAll();
+      return saveOrder(o).then(function(){
+        f.reset();
+        toggleForaneoFields();
+        pendingGuiaFotoDataUrl = null;
+        document.getElementById("guiaFotoPreview").style.display = "none";
+        alert("Orden " + o.code + " guardada.");
+      });
+    }).catch(function(err){
+      console.error(err);
+      alert("No se pudo guardar la orden. Revisa tu conexión e intenta de nuevo.");
+    }).finally(function(){
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Guardar orden"; }
+    });
+  });
+
+  // ---------- Mostrar/ocultar campos de guía según tipo de entrega ----------
+  function toggleForaneoFields(){
+    var sel = document.getElementById("tipoEntregaSelect");
+    document.getElementById("foraneoFields").style.display = (sel.value === "foraneo") ? "flex" : "none";
+  }
+  document.getElementById("tipoEntregaSelect").addEventListener("change", toggleForaneoFields);
+  toggleForaneoFields();
+
+  // ---------- Filters ----------
+  document.getElementById("fEstado").addEventListener("change", renderOrdersTable);
+  document.getElementById("fTipo").addEventListener("change", renderOrdersTable);
+  document.getElementById("fRuta").addEventListener("change", renderOrdersTable);
+  document.getElementById("fVendedor").addEventListener("change", renderOrdersTable);
+  document.getElementById("fBusca").addEventListener("input", renderOrdersTable);
+  document.getElementById("selAll").addEventListener("change", function(e){
+    Array.prototype.forEach.call(document.querySelectorAll(".rowSel"), function(cb){ cb.checked = e.target.checked; });
+  });
+
+  function getRutas(){
+    var set = {};
+    zonas.forEach(function(z){ set[z] = true; });
+    orders.forEach(function(o){ if (o.ruta) set[o.ruta] = true; });
+    return Object.keys(set).sort();
+  }
+
+  function fillRutaOptions(){
+    var rutas = getRutas();
+    var dl = document.getElementById("rutaList");
+    dl.innerHTML = rutas.map(function(r){ return '<option value="'+esc(r)+'">'; }).join("");
+    var sel = document.getElementById("fRuta");
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>' + rutas.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  // ---------- Zonas (catálogo) ----------
+  function renderZonaManager(){
+    var cont = document.getElementById("zonaList");
+    if (!zonas.length) {
+      cont.innerHTML = "";
+      document.getElementById("zonaEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("zonaEmpty").style.display = "none";
+    cont.innerHTML = zonas.slice().sort().map(function(z){
+      return '<span class="zone-tag">'+esc(z)+'<button type="button" data-del-zona="'+esc(z)+'" title="Eliminar zona">×</button></span>';
+    }).join("");
+  }
+  document.getElementById("btnAddZona").addEventListener("click", function(){
+    var input = document.getElementById("nuevaZonaInput");
+    var val = input.value.trim();
+    if (!val) return;
+    var exists = zonas.some(function(z){ return z.toLowerCase() === val.toLowerCase(); });
+    if (!exists) { zonas.push(val); saveZonas(zonas); }
+    input.value = "";
+    renderAll();
+  });
+  document.getElementById("nuevaZonaInput").addEventListener("keydown", function(e){
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("btnAddZona").click(); }
+  });
+  document.getElementById("zonaList").addEventListener("click", function(e){
+    var btn = e.target.closest("[data-del-zona]");
+    if (!btn) return;
+    zonas = zonas.filter(function(z){ return z !== btn.dataset.delZona; });
+    saveZonas(zonas);
+    renderAll();
+  });
+
+  // ---------- Vendedores (catálogo) ----------
+  function renderVendedorManager(){
+    var cont = document.getElementById("vendedorList");
+    if (!vendedores.length) {
+      cont.innerHTML = "";
+      document.getElementById("vendedorEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("vendedorEmpty").style.display = "none";
+    cont.innerHTML = vendedores.slice().sort().map(function(v){
+      return '<span class="zone-tag">'+esc(v)+'<button type="button" data-del-vendedor="'+esc(v)+'" title="Eliminar vendedor">×</button></span>';
+    }).join("");
+  }
+  document.getElementById("btnAddVendedor").addEventListener("click", function(){
+    var input = document.getElementById("nuevoVendedorInput");
+    var val = input.value.trim();
+    if (!val) return;
+    var exists = vendedores.some(function(v){ return v.toLowerCase() === val.toLowerCase(); });
+    if (!exists) { vendedores.push(val); saveVendedores(vendedores); }
+    input.value = "";
+    renderAll();
+  });
+  document.getElementById("nuevoVendedorInput").addEventListener("keydown", function(e){
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("btnAddVendedor").click(); }
+  });
+  document.getElementById("vendedorList").addEventListener("click", function(e){
+    var btn = e.target.closest("[data-del-vendedor]");
+    if (!btn) return;
+    vendedores = vendedores.filter(function(v){ return v !== btn.dataset.delVendedor; });
+    saveVendedores(vendedores);
+    renderAll();
+  });
+
+  function fillVendedorSelect(sel, currentValue){
+    if (!sel) return;
+    var opts = '<option value="">Sin asignar</option>' + vendedores.slice().sort().map(function(v){
+      return '<option value="'+esc(v)+'"'+(v === currentValue ? ' selected' : '')+'>'+esc(v)+'</option>';
+    }).join("");
+    sel.innerHTML = opts;
+    if (currentValue) sel.value = currentValue;
+  }
+  function fillVendedorFilters(){
+    fillVendedorSelect(document.getElementById("vendedorSelectForm"), "");
+    var fSel = document.getElementById("fVendedor");
+    var current = fSel.value;
+    fSel.innerHTML = '<option value="">Todos</option>' + vendedores.slice().sort().map(function(v){
+      return '<option value="'+esc(v)+'">'+esc(v)+'</option>';
+    }).join("");
+    fSel.value = current;
+  }
+
+  // ---------- Filtro de zonas para el reporte ----------
+  function allZoneKeys(){
+    var set = {};
+    zonas.forEach(function(z){ set[z] = true; });
+    orders.forEach(function(o){ set[getGroupKey(o)] = true; });
+    var keys = Object.keys(set).filter(function(k){ return k !== "Recoge en tienda (Pickup)"; }).sort();
+    keys.push("Recoge en tienda (Pickup)");
+    return keys;
+  }
+  function renderReportZonaChecks(){
+    var keys = allZoneKeys();
+    if (!reportZonaSelected) reportZonaSelected = {};
+    keys.forEach(function(k){ if (!(k in reportZonaSelected)) reportZonaSelected[k] = true; });
+    var cont = document.getElementById("reportZonaChecks");
+    if (!keys.length) {
+      cont.innerHTML = '<span class="muted small">Agrega zonas arriba o registra órdenes para poder filtrar.</span>';
+      return;
+    }
+    cont.innerHTML = keys.map(function(k){
+      var checked = reportZonaSelected[k] ? " checked" : "";
+      return '<label class="zone-check-item"><input type="checkbox" class="zonaCheck" data-zona="'+esc(k)+'"'+checked+'> '+esc(k)+'</label>';
+    }).join("");
+  }
+  document.getElementById("reportZonaChecks").addEventListener("change", function(e){
+    var cb = e.target.closest(".zonaCheck");
+    if (!cb) return;
+    reportZonaSelected[cb.dataset.zona] = cb.checked;
+  });
+  document.getElementById("btnZonaAll").addEventListener("click", function(){
+    Object.keys(reportZonaSelected || {}).forEach(function(k){ reportZonaSelected[k] = true; });
+    renderReportZonaChecks();
+  });
+  document.getElementById("btnZonaNone").addEventListener("click", function(){
+    Object.keys(reportZonaSelected || {}).forEach(function(k){ reportZonaSelected[k] = false; });
+    renderReportZonaChecks();
+  });
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function filteredOrders(){
+    var fe = document.getElementById("fEstado").value;
+    var ft = document.getElementById("fTipo").value;
+    var fr = document.getElementById("fRuta").value;
+    var fv = document.getElementById("fVendedor").value;
+    var fb = document.getElementById("fBusca").value.toLowerCase().trim();
+    return orders.filter(function(o){
+      if (fe && o.estado !== fe) return false;
+      if (ft && (o.tipoEntrega || "envio") !== ft) return false;
+      if (fr && o.ruta !== fr) return false;
+      if (fv && (o.vendedor || "") !== fv) return false;
+      if (fb && !(o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1)) return false;
+      return true;
+    });
+  }
+
+  function renderOrdersTable(){
+    var tbody = document.getElementById("ordersTbody");
+    var list = filteredOrders();
+    tbody.innerHTML = list.map(function(o){
+      var tipo = o.tipoEntrega || "envio";
+      return '<tr>' +
+        '<td><input type="checkbox" class="rowSel" data-id="'+o.id+'"></td>' +
+        '<td><strong>'+esc(o.code)+'</strong><div class="muted small">'+fmtDate(o.createdAt)+'</div></td>' +
+        '<td>'+esc(o.cliente)+'<div class="muted small">'+esc(o.telefono)+'</div></td>' +
+        '<td><select class="tipoSelect" data-id="'+o.id+'">' +
+          '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío</option>' +
+          '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Foráneo</option>' +
+          '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Pickup</option>' +
+        '</select></td>' +
+        '<td>'+esc(o.ruta || '—')+'</td>' +
+        '<td>'+(o.fechaEnvio ? fmtDateOnly(o.fechaEnvio) : '<span class="muted">—</span>')+'</td>' +
+        '<td><span class="badge badge-'+o.estado+'">'+estadoLabel(o.estado)+'</span></td>' +
+        '<td>'+
+          '<div class="btn-row">'+
+            '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver</button>'+
+            '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>'+
+            '<button class="btn btn-sm" data-act="label" data-id="'+o.id+'">Vista previa etiqueta</button>'+
+            (o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
+            (o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="advance" data-id="'+o.id+'">'+esc(nextActionLabel(o.estado))+'</button>' : '')+
+            (o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
+            '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>'+
+          '</div>'+
+        '</td>'+
+      '</tr>';
+    }).join("");
+    document.getElementById("ordersEmpty").style.display = list.length ? "none" : "block";
+  }
+
+  document.getElementById("ordersTbody").addEventListener("change", function(e){
+    var sel = e.target.closest("select.tipoSelect");
+    if (!sel) return;
+    var o = orders.find(function(x){ return x.id === sel.dataset.id; });
+    if (!o) return;
+    changeTipo(o, sel.value);
+  });
+
+  document.getElementById("ordersTbody").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    var o = orders.find(function(x){ return x.id === btn.dataset.id; });
+    if (!o) return;
+    var act = btn.dataset.act;
+    if (act === "view") return showOrderModal(o);
+    if (act === "edit") return showEditOrderModal(o);
+    if (act === "label") return previewLabels([o]);
+    if (act === "advance") return advanceEstado(o);
+    if (act === "regress") return regressEstado(o);
+    if (act === "deliver") return openDeliveryModal(o);
+    if (act === "delete") {
+      if (confirm("¿Eliminar la orden " + o.code + "? Esta acción no se puede deshacer.")) {
+        orders = orders.filter(function(x){ return x.id !== o.id; });
+        deleteOrderDoc(o.id);
+        renderAll();
+      }
+    }
+  });
+
+  var ESTADO_FLOW = ["pendiente","aprobado","empacado","en_ruta","entregado"];
+  function advanceEstado(o){
+    var idx = ESTADO_FLOW.indexOf(o.estado);
+    if (idx < 0 || idx >= ESTADO_FLOW.length - 1) return;
+    if (ESTADO_FLOW[idx+1] === "entregado") { openDeliveryModal(o); return; }
+    o.estado = ESTADO_FLOW[idx+1];
+    saveOrder(o);
+    renderAll();
+  }
+  function regressEstado(o){
+    var idx = ESTADO_FLOW.indexOf(o.estado);
+    if (idx <= 0) return;
+    o.estado = ESTADO_FLOW[idx-1];
+    saveOrder(o);
+    renderAll();
+  }
+
+  function showOrderModal(o){
+    var tipo = o.tipoEntrega || "envio";
+    var hist = (o.tipoHistorial || []).slice().reverse();
+    document.getElementById("ovOrderTitle").textContent = o.code + " — " + o.cliente;
+    document.getElementById("ovOrderBody").innerHTML =
+      buildEstadoStepper(o.estado) +
+      '<div class="btn-row" style="margin-bottom:16px;">' +
+        (o.estado !== 'entregado' ? '<button class="btn btn-primary btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">'+esc(nextActionLabel(o.estado))+'</button>' : '') +
+        (o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
+        (o.estado !== 'entregado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
+      '</div>' +
+      '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
+      '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
+      '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
+      '<div class="kv"><b>Ruta</b><span>'+esc(o.ruta || '—')+'</span></div>' +
+      '<div class="kv"><b>Fecha de envío</b><span>'+(o.fechaEnvio ? fmtDateOnly(o.fechaEnvio) : '—')+'</span></div>' +
+      '<div class="kv"><b>Vendedor</b><span>'+esc(o.vendedor || 'Sin asignar')+'</span></div>' +
+      '<div class="kv"><b>Valor venta</b><span>'+fmtMoney(o.valorVenta)+'</span></div>' +
+      '<div class="kv"><b>Tipo de entrega</b><span>' +
+        '<select id="modalTipoSelect" class="tipoSelect">' +
+          '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío local a domicilio</option>' +
+          '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Envío foráneo (transportadora)</option>' +
+          '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Recoge en tienda (Pickup)</option>' +
+        '</select>' +
+      '</span></div>' +
+      (hist.length ? '<div class="kv"><b>Historial de cambios</b><ul class="histList">' +
+        hist.map(function(h){ return '<li>'+fmtDate(h.fecha)+' — '+tipoLabel(h.de)+' → <strong>'+tipoLabel(h.a)+'</strong></li>'; }).join("") +
+      '</ul></div>' : '') +
+      (tipo === 'foraneo' ? (
+        '<div style="margin-top:14px;font-weight:700;font-size:13px;">Datos de la guía (envío foráneo)</div>' +
+        '<div class="row">' +
+          '<div class="field"><label>Transportadora</label><input id="modalTransportadora" value="'+esc((o.guia && o.guia.transportadora) || '')+'"></div>' +
+          '<div class="field"><label>Número de guía</label><input id="modalNumeroGuia" value="'+esc((o.guia && o.guia.numero) || '')+'"></div>' +
+          '<div class="field"><label>Costo de guía ($)</label><input id="modalCostoGuia" type="number" min="0" step="any" value="'+((o.guia && o.guia.costo) || 0)+'"></div>' +
+        '</div>' +
+        '<div class="field"><label>Foto de la guía / recibo</label>' +
+          '<input type="file" accept="image/*" capture="environment" id="modalGuiaFotoInput">' +
+          '<img id="modalGuiaFotoPreview" class="thumb" src="'+((o.guia && o.guia.fotoDataUrl) || '')+'" style="'+((o.guia && o.guia.fotoDataUrl) ? '' : 'display:none;')+'">' +
+        '</div>' +
+        '<div class="btn-row"><button type="button" class="btn btn-sm" id="btnGuardarGuia">Guardar guía</button></div>'
+      ) : '') +
+      (o.origenOrdenCode ? '<div class="kv"><b>Origen</b><span>Viene de <a href="#" class="order-link" data-open-order="'+esc(o.origenOrdenId)+'">'+esc(o.origenOrdenCode)+'</a> (productos que faltaron por surtir)</span></div>' : '') +
+      buildContenidoSection(o) +
+      (o.derivadaOrdenCode ? '<div class="kv"><b>Pendiente</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
+      (o.notas ? '<div class="kv"><b>Notas</b><span>'+esc(o.notas).replace(/\n/g,'<br>')+'</span></div>' : '') +
+      '<div class="kv"><b>Creada</b><span>'+fmtDate(o.createdAt)+'</span></div>' +
+      (o.entrega ? '<div class="kv"><b>Entregada</b><span>'+fmtDate(o.entrega.fecha)+' — recibió: '+esc(o.entrega.receptor)+'</span></div>' : '') +
+      '<div class="btn-row" style="margin-top:14px;">' +
+        '<button class="btn btn-primary" onclick="window.__aoriEditOne(\''+o.id+'\')">Editar orden</button>' +
+        '<button class="btn" onclick="window.__aoriPrintOne(\''+o.id+'\')">Vista previa etiqueta</button>' +
+      '</div>';
+    var modalSel = document.getElementById("modalTipoSelect");
+    if (modalSel) {
+      modalSel.addEventListener("change", function(){
+        changeTipo(o, modalSel.value, function(){
+          var fresh = orders.find(function(x){ return x.id === o.id; });
+          if (fresh) showOrderModal(fresh);
+        });
+      });
+    }
+    var pendingModalGuiaFoto = null;
+    var modalGuiaFotoInput = document.getElementById("modalGuiaFotoInput");
+    if (modalGuiaFotoInput) {
+      modalGuiaFotoInput.addEventListener("change", function(e){
+        var file = e.target.files[0];
+        if (!file) return;
+        readAndCompressImage(file, function(dataUrl){
+          pendingModalGuiaFoto = dataUrl;
+          var prev = document.getElementById("modalGuiaFotoPreview");
+          prev.src = dataUrl;
+          prev.style.display = "block";
+        });
+      });
+    }
+    var btnGuia = document.getElementById("btnGuardarGuia");
+    if (btnGuia) {
+      btnGuia.addEventListener("click", function(){
+        o.guia = {
+          transportadora: document.getElementById("modalTransportadora").value.trim(),
+          numero: document.getElementById("modalNumeroGuia").value.trim(),
+          costo: parseFloat(document.getElementById("modalCostoGuia").value) || 0,
+          fotoDataUrl: pendingModalGuiaFoto || (o.guia && o.guia.fotoDataUrl) || null
+        };
+        saveOrder(o);
+        renderAll();
+        alert("Guía actualizada.");
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".itemSurtidoChk"), function(cb){
+      cb.addEventListener("change", function(){
+        var idx = parseInt(cb.dataset.idx, 10);
+        if (o.items[idx]) o.items[idx].surtido = cb.checked;
+        syncContenidoFromItems(o);
+        saveOrder(o);
+        var fresh = orders.find(function(x){ return x.id === o.id; });
+        if (fresh) showOrderModal(fresh);
+      });
+    });
+    var btnGenPend = document.getElementById("btnGenerarPendiente");
+    if (btnGenPend) {
+      btnGenPend.addEventListener("click", function(){
+        generarOrdenPendiente(o);
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll("[data-open-order]"), function(a){
+      a.addEventListener("click", function(e){
+        e.preventDefault();
+        var target = orders.find(function(x){ return x.id === a.dataset.openOrder; });
+        if (target) showOrderModal(target);
+        else alert("Esa orden ya no está disponible.");
+      });
+    });
+    openOverlay("ovOrder");
+  }
+
+  // Sección "Contenido" del detalle de orden: checklist marcable en "empacado", lectura simple en las demás etapas.
+  function buildContenidoSection(o){
+    ensureOrderItems(o);
+    var editable = (o.estado === "empacado");
+    if (!o.items.length) {
+      return '<div class="kv"><b>Contenido</b><span class="muted">Sin productos.</span></div>';
+    }
+    var rows = o.items.map(function(it, i){
+      if (editable) {
+        return '<label class="chk-item"><input type="checkbox" class="itemSurtidoChk" data-idx="'+i+'"'+(it.surtido?' checked':'')+'> <span'+(it.surtido?'':' class="item-pend"')+'>'+esc(it.texto)+'</span></label>';
+      }
+      return '<div class="chk-item-ro"><span class="'+(it.surtido?'item-ok':'item-pend')+'">'+(it.surtido?'✓ ':'○ ')+esc(it.texto)+'</span></div>';
+    }).join("");
+    var pendCount = o.items.filter(function(it){ return !it.surtido; }).length;
+    var html = '<div class="kv"><b>Contenido</b><div class="checklist-box">'+rows+'</div></div>';
+    if (editable) {
+      html += '<div class="btn-row" style="margin:6px 0 0 120px;">' +
+        '<button type="button" class="btn btn-sm" id="btnGenerarPendiente"'+(pendCount ? '' : ' disabled')+'>Generar orden con lo no surtido'+(pendCount ? ' ('+pendCount+')' : '')+'</button>' +
+      '</div>';
+    }
+    return html;
+  }
+
+  // Crea una nueva orden "pendiente" con los productos no marcados como surtidos,
+  // deja en la orden original solo lo que sí se surtió, y enlaza ambas para trazabilidad.
+  function generarOrdenPendiente(o){
+    ensureOrderItems(o);
+    var noSurtidos = o.items.filter(function(it){ return !it.surtido; });
+    var surtidos = o.items.filter(function(it){ return it.surtido; });
+    if (!noSurtidos.length) { alert("Todos los productos de esta orden ya están marcados como surtidos."); return; }
+    if (!surtidos.length) { alert("Ningún producto está marcado como surtido. Si nada se surtió, no tiene sentido dividir la orden: retrocede el estado en vez de generar una nueva."); return; }
+    if (!confirm("Se generará una nueva orden pendiente con "+noSurtidos.length+" producto(s) no surtido(s), y esta orden se quedará solo con lo surtido. ¿Continuar?")) return;
+
+    genCode().then(function(code){
+      var nuevo = {
+        id: "o_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        code: code,
+        createdAt: new Date().toISOString(),
+        cliente: o.cliente,
+        telefono: o.telefono,
+        direccion: o.direccion,
+        ciudad: o.ciudad,
+        ruta: o.ruta,
+        contenido: noSurtidos.map(function(it){ return it.texto; }).join("\n"),
+        notas: "Generada automáticamente desde " + o.code + " por productos no surtidos.",
+        tamano: o.tamano,
+        tipoEntrega: o.tipoEntrega,
+        fechaEnvio: "",
+        vendedor: o.vendedor,
+        valorVenta: 0,
+        tipoHistorial: [],
+        guia: null,
+        estado: "pendiente",
+        entrega: null,
+        items: noSurtidos.map(function(it){ return { texto: it.texto, surtido: false }; }),
+        origenOrdenId: o.id,
+        origenOrdenCode: o.code,
+        derivadaOrdenId: null,
+        derivadaOrdenCode: null,
+        clienteId: o.clienteId || null
+      };
+      orders.unshift(nuevo);
+
+      o.items = surtidos;
+      syncContenidoFromItems(o);
+      o.derivadaOrdenId = nuevo.id;
+      o.derivadaOrdenCode = nuevo.code;
+
+      renderAll();
+      showOrderModal(o);
+      return Promise.all([saveOrder(nuevo), saveOrder(o)]).then(function(){
+        alert("Orden " + nuevo.code + " creada con lo pendiente por surtir.");
+      });
+    }).catch(function(err){
+      console.error(err);
+      alert("No se pudo generar la orden pendiente. Revisa tu conexión e intenta de nuevo.");
+    });
+  }
+  window.__aoriPrintOne = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (o) previewLabels([o]);
+  };
+  window.__aoriEditOne = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (o) showEditOrderModal(o);
+  };
+  window.__aoriAdvance = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (!o) return;
+    advanceEstado(o);
+    var fresh = orders.find(function(x){ return x.id === id; });
+    if (fresh) showOrderModal(fresh);
+  };
+  window.__aoriRegress = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (!o) return;
+    regressEstado(o);
+    var fresh = orders.find(function(x){ return x.id === id; });
+    if (fresh) showOrderModal(fresh);
+  };
+  window.__aoriDeliverNow = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (o) openDeliveryModal(o);
+  };
+
+  // ---------- Editar orden ----------
+  function showEditOrderModal(o){
+    document.getElementById("ovOrderTitle").textContent = "Editar — " + o.code;
+    document.getElementById("ovOrderBody").innerHTML =
+      '<form id="editOrderForm">' +
+        '<div class="row">' +
+          '<div class="field"><label>Cliente *</label><input required name="cliente" value="'+esc(o.cliente)+'"></div>' +
+          '<div class="field"><label>Teléfono *</label><input required name="telefono" value="'+esc(o.telefono)+'"></div>' +
+        '</div>' +
+        '<div class="row">' +
+          '<div class="field" style="flex:2;"><label>Dirección de entrega *</label><input required name="direccion" value="'+esc(o.direccion)+'"></div>' +
+          '<div class="field"><label>Ciudad</label><input name="ciudad" value="'+esc(o.ciudad || '')+'"></div>' +
+        '</div>' +
+        '<div class="row">' +
+          '<div class="field"><label>Ruta / Zona de envío</label><input name="ruta" list="rutaList" value="'+esc(o.ruta || '')+'"></div>' +
+          '<div class="field"><label>Fecha de envío / entrega</label><input type="date" name="fechaEnvio" value="'+esc(o.fechaEnvio || '')+'"></div>' +
+          '<div class="field"><label>Tamaño de etiqueta</label>' +
+            '<select name="tamano">' +
+              '<option value="big"'+(o.tamano!=='small'?' selected':'')+'>Grande 10x15cm (envío)</option>' +
+              '<option value="small"'+(o.tamano==='small'?' selected':'')+'>Pequeña 5x3cm (empaque)</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div class="row">' +
+          '<div class="field"><label>Vendedor responsable</label><select name="vendedor" id="editVendedorSelect"></select></div>' +
+          '<div class="field"><label>Valor de la venta ($)</label><input type="number" name="valorVenta" min="0" step="any" value="'+(o.valorVenta || 0)+'"></div>' +
+        '</div>' +
+        '<div class="field"><label>Contenido / productos del pedido * — un producto por línea</label><textarea required name="contenido">'+esc(o.contenido)+'</textarea></div>' +
+        '<div class="field"><label>Notas internas</label><textarea name="notas">'+esc(o.notas || '')+'</textarea></div>' +
+        '<div class="btn-row" style="margin-top:10px;">' +
+          '<button type="submit" class="btn btn-primary">Guardar cambios</button>' +
+          '<button type="button" class="btn" id="btnCancelarEdicion">Cancelar</button>' +
+        '</div>' +
+      '</form>';
+    fillVendedorSelect(document.getElementById("editVendedorSelect"), o.vendedor || "");
+    document.getElementById("editOrderForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      var f = e.target;
+      o.cliente = f.cliente.value.trim();
+      o.telefono = f.telefono.value.trim();
+      o.direccion = f.direccion.value.trim();
+      o.ciudad = f.ciudad.value.trim();
+      o.ruta = f.ruta.value.trim();
+      o.fechaEnvio = f.fechaEnvio.value || "";
+      o.tamano = f.tamano.value;
+      o.vendedor = f.vendedor.value || "";
+      o.valorVenta = parseFloat(f.valorVenta.value) || 0;
+      o.items = rebuildItemsPreserving(o.items, f.contenido.value.trim());
+      syncContenidoFromItems(o);
+      o.notas = f.notas.value.trim();
+      o.clienteId = findOrCreateCliente(o.cliente, o.telefono, o.direccion, o.ciudad, o.ruta);
+      saveOrder(o);
+      renderAll();
+      showOrderModal(o);
+      alert("Orden " + o.code + " actualizada.");
+    });
+    document.getElementById("btnCancelarEdicion").addEventListener("click", function(){
+      showOrderModal(o);
+    });
+    openOverlay("ovOrder");
+  }
+
+  // ---------- Select all / vista previa de seleccionadas ----------
+  document.getElementById("btnPrintSelected").addEventListener("click", function(){
+    var ids = Array.prototype.map.call(document.querySelectorAll(".rowSel:checked"), function(cb){ return cb.dataset.id; });
+    if (!ids.length) { alert("Selecciona al menos una orden de la tabla."); return; }
+    var list = orders.filter(function(o){ return ids.indexOf(o.id) > -1; });
+    previewLabels(list);
+  });
+
+  // ---------- Construcción de etiquetas ----------
+  function buildLabelPages(list){
+    var pages = list.map(function(o){
+      var big = o.tamano !== "small";
+      var cls = big ? "label-big" : "label-small";
+      var size = big ? "100mm 150mm" : "50mm 30mm";
+      var tipo = o.tipoEntrega || "envio";
+      var items = String(o.contenido || "").split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+      var itemsHtml = items.length ? items.map(function(l){
+        return '<div class="lbl-item"><span class="lbl-chk"></span><span>'+esc(l)+'</span></div>';
+      }).join("") : '<div class="lbl-line">'+esc(o.contenido).replace(/\n/g,'<br>')+'</div>';
+      var envioTxt = o.fechaEnvio ? fmtDateOnly(o.fechaEnvio) : fmtDate(o.createdAt).split(' ')[0];
+      var tipoTitulo = tipo === 'pickup' ? 'PICKUP — RECOGE EN TIENDA' : (tipo === 'foraneo' ? 'ENVÍO FORÁNEO' : 'ENVÍO A DOMICILIO');
+      var footLeft = tipo === 'pickup' ? 'PICKUP' : (tipo === 'foraneo' ? 'GUÍA: '+esc((o.guia && o.guia.numero) || 'PENDIENTE') : 'RUTA: '+esc(o.ruta || 'SIN ASIGNAR'));
+      var transpLine = (tipo === 'foraneo' && o.guia && o.guia.transportadora) ? '<div class="lbl-line"><strong>Transportadora:</strong> '+esc(o.guia.transportadora)+'</div>' : '';
+      var content = big ? (
+        '<div class="lbl-brandrow">' +
+          aoriLogoSvg('30mm', '#000000') +
+          '<div class="lbl-slogan">Glow with intention</div>' +
+        '</div>' +
+        '<div class="lbl-tipo">'+tipoTitulo+'</div>' +
+        '<div class="lbl-code">'+esc(o.code)+'</div>' +
+        '<div class="lbl-title">Cliente</div>' +
+        '<div class="lbl-cliente">'+esc(o.cliente)+'</div>' +
+        '<div class="lbl-line"><strong>Tel:</strong> '+esc(o.telefono)+'</div>' +
+        '<div class="lbl-line"><strong>Dirección:</strong> '+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad):'')+'</div>' +
+        transpLine +
+        '<div class="lbl-box"><div class="lbl-title">Contenido del pedido (palomear al empacar)</div>'+itemsHtml+'</div>' +
+        '<div class="lbl-foot"><span>'+footLeft+'</span><span>Envío: '+envioTxt+'</span></div>'
+      ) : (
+        aoriLogoSvg('16mm', '#000000') +
+        '<div class="lbl-code">'+esc(o.code)+'</div>' +
+        '<div class="lbl-cliente">'+esc(o.cliente)+'</div>' +
+        '<div class="lbl-line">Tel: '+esc(o.telefono)+'</div>' +
+        '<div class="lbl-line">'+footLeft+'</div>' +
+        transpLine +
+        '<div class="lbl-line">Envío: '+envioTxt+'</div>'
+      );
+      return '<div class="label-page '+cls+'" style="width:'+size.split(' ')[0]+';height:'+size.split(' ')[1]+';">'+content+'</div>';
+    }).join("");
+    var firstSize = (list.length && list[0].tamano !== "small") ? "100mm 150mm" : "50mm 30mm";
+    return { pagesHtml: pages, firstSize: firstSize };
+  }
+
+  // CSS de etiquetas, duplicado en texto plano para poder inyectarlo en la ventana de impresión aparte.
+  var LABEL_PRINT_CSS =
+    '*{box-sizing:border-box;margin:0;padding:0;} body{font-family:-apple-system,Helvetica,Arial,sans-serif;}' +
+    '.label-page{page-break-after:always;padding:4mm;display:flex;flex-direction:column;justify-content:flex-start;}' +
+    '.label-page:last-child{page-break-after:auto;}' +
+    '.label-big .lbl-code{font-size:20px;font-weight:800;letter-spacing:1px;margin-bottom:2mm;}' +
+    '.label-big .lbl-title{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#555;margin-bottom:1mm;}' +
+    '.label-big .lbl-cliente{font-size:16px;font-weight:700;margin-bottom:1mm;}' +
+    '.label-big .lbl-line{font-size:12px;margin-bottom:1mm;}' +
+    '.label-big .lbl-box{border:1.5px solid #000;border-radius:4px;padding:2mm 3mm;margin-top:2mm;}' +
+    '.label-big .lbl-foot{display:flex;justify-content:space-between;margin-top:2mm;font-size:11px;font-weight:700;}' +
+    '.label-big .lbl-brand{font-size:11px;font-weight:800;letter-spacing:2px;margin-bottom:2mm;}' +
+    '.label-big .lbl-item{font-size:11.5px;margin-bottom:1.2mm;display:flex;align-items:flex-start;gap:1.8mm;}' +
+    '.lbl-chk{display:inline-block;width:3.4mm;height:3.4mm;border:1.4px solid #000;flex:0 0 auto;margin-top:0.5mm;}' +
+    '.label-big .lbl-tipo{display:inline-block;border:1.4px solid #000;border-radius:3px;padding:0.8mm 2.2mm;font-size:10px;font-weight:800;letter-spacing:0.5px;margin-bottom:2mm;}' +
+    '.label-small{font-size:8px;}' +
+    '.label-small .lbl-code{font-size:11px;font-weight:800;margin-bottom:1mm;}' +
+    '.label-small .lbl-cliente{font-size:9px;font-weight:700;margin-bottom:0.5mm;}' +
+    '.label-small .lbl-line{font-size:7.5px;margin-bottom:0.5mm;}' +
+    '.label-small .lbl-brand{font-size:7px;font-weight:800;letter-spacing:1px;margin-bottom:1mm;}' +
+    '.aori-logo-svg{display:block;} .aori-logo-svg g,.aori-logo-svg path{fill:currentColor !important;}' +
+    '.label-big .aori-logo-svg{margin-bottom:1.5mm;} .label-small .aori-logo-svg{margin-bottom:1mm;}' +
+    '.label-big .lbl-brandrow{display:flex;align-items:center;gap:3mm;margin-bottom:2mm;}' +
+    '.label-big .lbl-brandrow .aori-logo-svg{margin-bottom:0;}' +
+    '.label-big .lbl-slogan{font-size:11px;font-style:italic;color:#a8452a;line-height:1.15;font-weight:600;white-space:nowrap;}';
+
+  // ---------- Vista previa ----------
+  function previewLabels(list){
+    if (!list.length) return;
+    var built = buildLabelPages(list);
+    document.getElementById("previewBody").innerHTML = built.pagesHtml;
+    window.__aoriPendingLabelList = list;
+    openOverlay("ovPreview");
+  }
+  document.getElementById("btnPrintFromPreview").addEventListener("click", function(){
+    if (window.__aoriPendingLabelList) printLabels(window.__aoriPendingLabelList);
+  });
+
+  // ---------- Impresión directa ----------
+  // Abre una ventana nueva (fuera del sandbox del artifact) con solo las etiquetas,
+  // para que window.print() dispare el diálogo real de impresión en vez de forzar una descarga.
+  function printLabels(list){
+    var built = buildLabelPages(list);
+    var win = null;
+    try { win = window.open('', '_blank', 'width=900,height=700'); } catch(e){ win = null; }
+    if (!win) {
+      // Alternativa si el navegador bloquea la ventana: imprime dentro de la misma página.
+      var area = document.getElementById("print-area");
+      area.innerHTML = built.pagesHtml;
+      setPageSize(built.firstSize);
+      setTimeout(function(){ window.print(); }, 50);
+      return;
+    }
+    var doc = win.document;
+    doc.open();
+    doc.write(
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiquetas AORI</title>' +
+      '<style>@page{size:'+built.firstSize+';margin:0;} ' + LABEL_PRINT_CSS +
+      ' .aori-toolbar{position:fixed;top:10px;right:10px;font-family:-apple-system,Helvetica,Arial,sans-serif;z-index:9;}' +
+      ' .aori-toolbar button{padding:9px 16px;border-radius:8px;border:none;background:#b8895f;color:#fff;font-weight:700;font-size:13px;cursor:pointer;}' +
+      ' @media print{ .aori-toolbar{display:none;} }</style>' +
+      '</head><body>' +
+      '<div class="aori-toolbar"><button onclick="window.print()">Imprimir</button></div>' +
+      built.pagesHtml +
+      '</body></html>'
+    );
+    doc.close();
+    win.focus();
+    setTimeout(function(){ try { win.print(); } catch(e){} }, 300);
+  }
+
+  var pageStyleEl = document.getElementById("dynPageStyle");
+  function setPageSize(size){
+    var el = document.getElementById("dynPageStyle");
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "dynPageStyle";
+      document.head.appendChild(el);
+    }
+    el.textContent = "@page { size: " + size + "; margin: 0; }";
+  }
+
+  // ---------- Delivery capture ----------
+  var sigCanvas, sigCtx, sigDrawing = false, sigHasStrokes = false;
+  function initSigPad(){
+    sigCanvas = document.getElementById("sigPad");
+    var ratio = window.devicePixelRatio || 1;
+    var w = sigCanvas.clientWidth || 500;
+    var h = 150;
+    sigCanvas.width = w * ratio;
+    sigCanvas.height = h * ratio;
+    sigCtx = sigCanvas.getContext("2d");
+    sigCtx.scale(ratio, ratio);
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = "round";
+    sigCtx.strokeStyle = "#1f2328";
+    sigHasStrokes = false;
+
+    function pos(evt){
+      var rect = sigCanvas.getBoundingClientRect();
+      var t = evt.touches ? evt.touches[0] : evt;
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    }
+    function start(evt){ sigDrawing = true; var p = pos(evt); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); evt.preventDefault(); }
+    function move(evt){ if (!sigDrawing) return; var p = pos(evt); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigHasStrokes = true; evt.preventDefault(); }
+    function end(){ sigDrawing = false; }
+
+    sigCanvas.onmousedown = start; sigCanvas.onmousemove = move; window.addEventListener("mouseup", end);
+    sigCanvas.ontouchstart = start; sigCanvas.ontouchmove = move; sigCanvas.ontouchend = end;
+  }
+  document.getElementById("clearSig").addEventListener("click", function(){
+    if (sigCtx) { sigCtx.clearRect(0,0,sigCanvas.width, sigCanvas.height); sigHasStrokes = false; }
+  });
+
+  // Comprime una foto subida y devuelve un dataURL liviano vía callback.
+  function readAndCompressImage(file, callback){
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var img = new Image();
+      img.onload = function(){
+        var maxW = 500;
+        var scale = Math.min(1, maxW / img.width);
+        var canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        callback(canvas.toDataURL("image/jpeg", 0.6));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  var pendingPhotoDataUrl = null;
+  document.getElementById("deliveryPhoto").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    readAndCompressImage(file, function(dataUrl){
+      pendingPhotoDataUrl = dataUrl;
+      var prev = document.getElementById("deliveryPhotoPreview");
+      prev.src = pendingPhotoDataUrl;
+      prev.style.display = "block";
+    });
+  });
+
+  // Foto de guía al crear una orden foránea
+  var pendingGuiaFotoDataUrl = null;
+  document.getElementById("guiaFotoInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    readAndCompressImage(file, function(dataUrl){
+      pendingGuiaFotoDataUrl = dataUrl;
+      var prev = document.getElementById("guiaFotoPreview");
+      prev.src = pendingGuiaFotoDataUrl;
+      prev.style.display = "block";
+    });
+  });
+
+  function openDeliveryModal(o){
+    var form = document.getElementById("deliveryForm");
+    form.reset();
+    form.orderId.value = o.id;
+    pendingPhotoDataUrl = null;
+    document.getElementById("deliveryPhotoPreview").style.display = "none";
+    openOverlay("ovDelivery");
+    setTimeout(initSigPad, 30);
+  }
+
+  document.getElementById("deliveryForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var f = e.target;
+    var o = orders.find(function(x){ return x.id === f.orderId.value; });
+    if (!o) return;
+    var firmaDataUrl = null;
+    if (sigHasStrokes && sigCanvas) {
+      firmaDataUrl = sigCanvas.toDataURL("image/png");
+    }
+    o.entrega = {
+      fecha: new Date().toISOString(),
+      receptor: f.receptor.value.trim(),
+      firmaDataUrl: firmaDataUrl,
+      fotoDataUrl: pendingPhotoDataUrl
+    };
+    o.estado = "entregado";
+    saveOrder(o);
+    document.getElementById("ovDelivery").classList.remove("open");
+    renderAll();
+    alert("Entrega registrada para " + o.code + ".");
+  });
+
+  // ---------- Rutas view ----------
+  function getRutasVisibleOrders(){
+    var soloAprobadas = document.getElementById("rutasSoloAprobadas").checked;
+    var zonaFiltro = document.getElementById("rutasZonaFiltro").value;
+    return orders.filter(function(o){
+      if (soloAprobadas && o.estado === "pendiente") return false;
+      if (zonaFiltro && getGroupKey(o) !== zonaFiltro) return false;
+      return true;
+    });
+  }
+
+  function fillRutasZonaFiltro(){
+    var sel = document.getElementById("rutasZonaFiltro");
+    var current = sel.value;
+    var keys = allZoneKeys();
+    sel.innerHTML = '<option value="">Todas las zonas</option>' + keys.map(function(k){ return '<option value="'+esc(k)+'">'+esc(k)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  function buildRouteRows(list){
+    return list.map(function(o, i){
+      return '<tr><td>'+(i+1)+'</td><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+esc(o.direccion)+(o.ciudad?', '+esc(o.ciudad):'')+'<br>Tel: '+esc(o.telefono)+'</td>'+
+        '<td class="firma-cell"><span class="muted small">Firma:</span></td><td style="width:55px;">Hora:<br>____</td></tr>';
+    }).join("");
+  }
+
+  function renderRutas(){
+    fillRutasZonaFiltro();
+    var cont = document.getElementById("rutasContainer");
+    var visible = getRutasVisibleOrders();
+    var grouped = {};
+    visible.forEach(function(o){
+      var key = getGroupKey(o);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o);
+    });
+    var keys = Object.keys(grouped).sort();
+    if (!keys.length) {
+      cont.innerHTML = "";
+      document.getElementById("rutasEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("rutasEmpty").style.display = "none";
+    cont.innerHTML = keys.map(function(k){
+      var list = grouped[k];
+      var pendCount = list.filter(function(o){ return o.estado !== "entregado"; }).length;
+      var rows = list.map(function(o){
+        return '<tr><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+esc(o.direccion)+'</td><td>'+esc(o.telefono)+'</td>'+
+          '<td><span class="badge badge-'+tipoBadgeClass(o.tipoEntrega)+'">'+tipoLabel(o.tipoEntrega)+'</span></td>'+
+          '<td><span class="badge badge-'+o.estado+'">'+estadoLabel(o.estado)+'</span></td></tr>';
+      }).join("");
+      return '<div class="route-group">' +
+        '<div class="route-head"><strong>'+esc(k)+'</strong><span class="small muted">'+list.length+' orden(es) · '+pendCount+' pendiente(s)</span>' +
+        '<button class="btn btn-sm" data-print-route="'+esc(k)+'">Imprimir hoja de ruta</button></div>' +
+        '<table><thead><tr><th>Código</th><th>Cliente</th><th>Dirección</th><th>Teléfono</th><th>Tipo</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+      '</div>';
+    }).join("");
+  }
+
+  document.getElementById("rutasContainer").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-print-route]");
+    if (!btn) return;
+    printRouteSheet(btn.dataset.printRoute);
+  });
+  document.getElementById("rutasSoloAprobadas").addEventListener("change", renderRutas);
+  document.getElementById("rutasZonaFiltro").addEventListener("change", renderRutas);
+  document.getElementById("btnPrintAllRoutes").addEventListener("click", printAllRouteSheets);
+
+  function printRouteSheet(groupName){
+    var list = getRutasVisibleOrders().filter(function(o){ return getGroupKey(o) === groupName; });
+    var rows = buildRouteRows(list);
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Hoja de ruta') +
+      '<div class="muted">Ruta / zona: <strong>'+esc(groupName)+'</strong> · Generada: '+fmtDate(new Date().toISOString())+'</div>' +
+      '<table><thead><tr><th>#</th><th>Código</th><th>Cliente</th><th>Dirección / Tel</th><th>Firma de quien recibe</th><th>Hora</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+
+  function printAllRouteSheets(){
+    var visible = getRutasVisibleOrders();
+    if (!visible.length) { alert("No hay órdenes para imprimir con los filtros actuales."); return; }
+    var grouped = {};
+    visible.forEach(function(o){
+      var key = getGroupKey(o);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o);
+    });
+    var keys = Object.keys(grouped).sort();
+    var sections = keys.map(function(k){
+      var list = grouped[k];
+      return '<div class="route-sheet-section">' +
+        '<h2 class="zona-title">'+esc(k)+' ('+list.length+' orden(es))</h2>' +
+        '<table><thead><tr><th>#</th><th>Código</th><th>Cliente</th><th>Dirección / Tel</th><th>Firma de quien recibe</th><th>Hora</th></tr></thead><tbody>'+buildRouteRows(list)+'</tbody></table>' +
+      '</div>';
+    }).join("");
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Hoja de ruta — todas las zonas') +
+      '<div class="muted">Generada: '+fmtDate(new Date().toISOString())+' · '+visible.length+' orden(es) en '+keys.length+' zona(s)</div>' +
+      sections +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+
+  function printReportByZone(){
+    if (!orders.length) { alert("Aún no hay órdenes registradas."); return; }
+    var selected = reportZonaSelected || {};
+    var grouped = {};
+    orders.forEach(function(o){
+      var key = getGroupKey(o);
+      if (!selected[key]) return;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o);
+    });
+    var keys = Object.keys(grouped).sort();
+    if (!keys.length) { alert("No hay órdenes en las zonas seleccionadas. Marca al menos una zona con pedidos."); return; }
+    var grandTotalCosto = 0;
+    var totalOrdenes = 0;
+    var summaryRows = keys.map(function(k){
+      var list = grouped[k];
+      totalOrdenes += list.length;
+      var c = {pendiente:0, aprobado:0, empacado:0, en_ruta:0, entregado:0};
+      var costoZona = 0;
+      list.forEach(function(o){
+        c[o.estado] = (c[o.estado]||0) + 1;
+        if (o.guia && o.guia.costo) costoZona += Number(o.guia.costo) || 0;
+      });
+      grandTotalCosto += costoZona;
+      return '<tr><td>'+esc(k)+'</td><td>'+list.length+'</td><td>'+c.pendiente+'</td><td>'+c.aprobado+'</td><td>'+c.empacado+'</td><td>'+c.en_ruta+'</td><td>'+c.entregado+'</td><td>'+fmtMoney(costoZona)+'</td></tr>';
+    }).join("");
+    var detail = keys.map(function(k){
+      var rows = grouped[k].map(function(o){
+        var g = o.guia;
+        return '<tr><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+esc(o.telefono)+'</td>'+
+          '<td>'+tipoLabel(o.tipoEntrega)+'</td><td>'+estadoLabel(o.estado)+'</td><td>'+(o.fechaEnvio ? fmtDateOnly(o.fechaEnvio) : '—')+'</td>'+
+          '<td>'+(g && g.numero ? esc((g.transportadora||'')+' '+g.numero) : '—')+'</td>'+
+          '<td>'+(g && g.costo ? fmtMoney(g.costo) : '—')+'</td></tr>';
+      }).join("");
+      return '<h2 class="zona-title">'+esc(k)+' ('+grouped[k].length+' orden(es))</h2>' +
+        '<table><thead><tr><th>Código</th><th>Cliente</th><th>Teléfono</th><th>Tipo</th><th>Estado</th><th>Fecha envío</th><th>Guía</th><th>Costo guía</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    }).join("");
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Reporte de paquetes por zona / pickup') +
+      '<div class="muted">Generado: '+fmtDate(new Date().toISOString())+' · '+totalOrdenes+' orden(es) en las zonas seleccionadas</div>' +
+      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
+      '<div style="text-align:right;font-weight:700;margin-top:6px;">Total costos de guías: '+fmtMoney(grandTotalCosto)+'</div>' +
+      detail +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+  document.getElementById("btnReportZona").addEventListener("click", printReportByZone);
+
+  // ---------- Estadísticas de ventas por vendedor ----------
+  function calcVentasPorVendedor(desde, hasta){
+    var map = {};
+    orders.forEach(function(o){
+      var d = (o.createdAt || "").slice(0,10);
+      if (desde && d < desde) return;
+      if (hasta && d > hasta) return;
+      var v = o.vendedor || "Sin asignar";
+      if (!map[v]) map[v] = { ordenes:0, entregadas:0, valorTotal:0 };
+      map[v].ordenes++;
+      if (o.estado === "entregado") map[v].entregadas++;
+      map[v].valorTotal += Number(o.valorVenta) || 0;
+    });
+    return map;
+  }
+
+  function renderVendedorStats(){
+    var desde = document.getElementById("ventasDesde").value;
+    var hasta = document.getElementById("ventasHasta").value;
+    var map = calcVentasPorVendedor(desde, hasta);
+    var names = Object.keys(map).sort(function(a,b){ return map[b].valorTotal - map[a].valorTotal; });
+    var tbody = document.getElementById("vendedorStatsTbody");
+    if (!names.length) {
+      tbody.innerHTML = "";
+      document.getElementById("vendedorStatsEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("vendedorStatsEmpty").style.display = "none";
+    tbody.innerHTML = names.map(function(v){
+      var s = map[v];
+      var efect = s.ordenes ? Math.round((s.entregadas / s.ordenes) * 100) : 0;
+      return '<tr><td>'+esc(v)+'</td><td>'+s.ordenes+'</td><td>'+s.entregadas+'</td><td>'+efect+'%</td><td>'+fmtMoney(s.valorTotal)+'</td></tr>';
+    }).join("");
+  }
+  document.getElementById("ventasDesde").addEventListener("change", renderVendedorStats);
+  document.getElementById("ventasHasta").addEventListener("change", renderVendedorStats);
+  document.getElementById("btnLimpiarFechasVentas").addEventListener("click", function(){
+    document.getElementById("ventasDesde").value = "";
+    document.getElementById("ventasHasta").value = "";
+    renderVendedorStats();
+  });
+
+  function printReportVentas(){
+    if (!orders.length) { alert("Aún no hay órdenes registradas."); return; }
+    var desde = document.getElementById("ventasDesde").value;
+    var hasta = document.getElementById("ventasHasta").value;
+    var map = calcVentasPorVendedor(desde, hasta);
+    var names = Object.keys(map).sort(function(a,b){ return map[b].valorTotal - map[a].valorTotal; });
+    if (!names.length) { alert("No hay órdenes en el rango de fechas seleccionado."); return; }
+    var granTotal = 0, granOrdenes = 0;
+    var rows = names.map(function(v){
+      var s = map[v];
+      granTotal += s.valorTotal;
+      granOrdenes += s.ordenes;
+      var efect = s.ordenes ? Math.round((s.entregadas / s.ordenes) * 100) : 0;
+      return '<tr><td>'+esc(v)+'</td><td>'+s.ordenes+'</td><td>'+s.entregadas+'</td><td>'+efect+'%</td><td>'+fmtMoney(s.valorTotal)+'</td></tr>';
+    }).join("");
+    var rango = (desde || hasta) ? ("Del "+(desde?fmtDateOnly(desde):"inicio")+" al "+(hasta?fmtDateOnly(hasta):"hoy")) : "Todas las fechas";
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Estadística de ventas por vendedor') +
+      '<div class="muted">'+esc(rango)+' · Generado: '+fmtDate(new Date().toISOString())+'</div>' +
+      '<table class="summary"><thead><tr><th>Vendedor</th><th>Órdenes</th><th>Entregadas</th><th>Efectividad</th><th>Valor total ventas</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+      '<div style="text-align:right;font-weight:700;margin-top:6px;">Total: '+granOrdenes+' orden(es) · '+fmtMoney(granTotal)+'</div>' +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+  document.getElementById("btnReportVentas").addEventListener("click", printReportVentas);
+
+  // ---------- Clientas (catálogo) ----------
+  function findClienteByTelefono(telefono){
+    var t = String(telefono || "").trim();
+    if (!t) return null;
+    return clientes.find(function(c){ return String(c.telefono || "").trim() === t; }) || null;
+  }
+
+  // Busca una clienta por teléfono; si no existe, la crea a partir de los datos de la orden.
+  // Así no hay que registrar manualmente a las clientas nuevas: quedan guardadas solas.
+  function findOrCreateCliente(nombre, telefono, direccion, ciudad, ruta){
+    var existing = findClienteByTelefono(telefono);
+    if (existing) return existing.id;
+    var nuevo = {
+      id: "c_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+      nombre: nombre,
+      telefono: telefono,
+      direccion: direccion,
+      ciudad: ciudad,
+      ruta: ruta || "",
+      notas: "",
+      createdAt: new Date().toISOString()
+    };
+    clientes.push(nuevo);
+    saveClientes(clientes);
+    return nuevo.id;
+  }
+
+  function fillClienteSelectForm(){
+    var sel = document.getElementById("clienteSelectForm");
+    var current = sel.value;
+    var list = clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    sel.innerHTML = '<option value="">— Nueva clienta / escribir manualmente —</option>' +
+      list.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.nombre)+' — '+esc(c.telefono)+'</option>'; }).join("");
+    sel.value = current;
+  }
+  document.getElementById("clienteSelectForm").addEventListener("change", function(e){
+    var c = clientes.find(function(x){ return x.id === e.target.value; });
+    var f = document.getElementById("orderForm");
+    if (!c) return;
+    f.cliente.value = c.nombre;
+    f.telefono.value = c.telefono;
+    f.direccion.value = c.direccion || "";
+    f.ciudad.value = c.ciudad || "";
+    f.ruta.value = c.ruta || "";
+  });
+
+  function contarOrdenesCliente(c){
+    return orders.filter(function(o){
+      if (o.clienteId) return o.clienteId === c.id;
+      return String(o.telefono || "").trim() === String(c.telefono || "").trim();
+    }).length;
+  }
+
+  function renderClientesManager(){
+    var busca = document.getElementById("fClienteBusca").value.toLowerCase().trim();
+    var list = clientes.filter(function(c){
+      if (!busca) return true;
+      return c.nombre.toLowerCase().indexOf(busca) > -1 || String(c.telefono||"").toLowerCase().indexOf(busca) > -1;
+    }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    var tbody = document.getElementById("clientesTbody");
+    if (!list.length) {
+      tbody.innerHTML = "";
+      document.getElementById("clientesEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("clientesEmpty").style.display = "none";
+    tbody.innerHTML = list.map(function(c){
+      return '<tr>' +
+        '<td>'+esc(c.nombre)+'</td>' +
+        '<td>'+esc(c.telefono)+'</td>' +
+        '<td>'+esc(c.direccion || '—')+'</td>' +
+        '<td>'+esc(c.ciudad || '—')+'</td>' +
+        '<td>'+esc(c.ruta || '—')+'</td>' +
+        '<td>'+contarOrdenesCliente(c)+'</td>' +
+        '<td><div class="btn-row">' +
+          '<button class="btn btn-sm" data-edit-cliente="'+esc(c.id)+'">Editar</button>' +
+          '<button class="btn btn-sm btn-danger" data-del-cliente="'+esc(c.id)+'">Eliminar</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join("");
+  }
+  document.getElementById("fClienteBusca").addEventListener("input", renderClientesManager);
+
+  document.getElementById("clientesTbody").addEventListener("click", function(e){
+    var editBtn = e.target.closest("[data-edit-cliente]");
+    var delBtn = e.target.closest("[data-del-cliente]");
+    if (editBtn) {
+      var c = clientes.find(function(x){ return x.id === editBtn.dataset.editCliente; });
+      if (!c) return;
+      var f = document.getElementById("clienteForm");
+      f.clienteId.value = c.id;
+      f.nombre.value = c.nombre;
+      f.telefono.value = c.telefono;
+      f.direccion.value = c.direccion || "";
+      f.ciudad.value = c.ciudad || "";
+      f.ruta.value = c.ruta || "";
+      f.notas.value = c.notas || "";
+      document.getElementById("clienteFormTitle").textContent = "Editar clienta — " + c.nombre;
+      document.getElementById("btnCancelarEdicionCliente").style.display = "";
+      f.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (delBtn) {
+      var cid = delBtn.dataset.delCliente;
+      var cc = clientes.find(function(x){ return x.id === cid; });
+      if (cc && confirm('¿Eliminar a "'+cc.nombre+'" del catálogo? Las órdenes ya creadas conservan sus datos.')) {
+        clientes = clientes.filter(function(x){ return x.id !== cid; });
+        saveClientes(clientes);
+        renderAll();
+      }
+    }
+  });
+
+  document.getElementById("btnCancelarEdicionCliente").addEventListener("click", function(){
+    document.getElementById("clienteForm").reset();
+    document.getElementById("clienteForm").clienteId.value = "";
+    document.getElementById("clienteFormTitle").textContent = "Registrar clienta";
+    document.getElementById("btnCancelarEdicionCliente").style.display = "none";
+  });
+
+  document.getElementById("clienteForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var f = e.target;
+    var id = f.clienteId.value;
+    if (id) {
+      var c = clientes.find(function(x){ return x.id === id; });
+      if (c) {
+        c.nombre = f.nombre.value.trim();
+        c.telefono = f.telefono.value.trim();
+        c.direccion = f.direccion.value.trim();
+        c.ciudad = f.ciudad.value.trim();
+        c.ruta = f.ruta.value.trim();
+        c.notas = f.notas.value.trim();
+      }
+    } else {
+      clientes.push({
+        id: "c_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        nombre: f.nombre.value.trim(),
+        telefono: f.telefono.value.trim(),
+        direccion: f.direccion.value.trim(),
+        ciudad: f.ciudad.value.trim(),
+        ruta: f.ruta.value.trim(),
+        notas: f.notas.value.trim(),
+        createdAt: new Date().toISOString()
+      });
+    }
+    saveClientes(clientes);
+    f.reset();
+    f.clienteId.value = "";
+    document.getElementById("clienteFormTitle").textContent = "Registrar clienta";
+    document.getElementById("btnCancelarEdicionCliente").style.display = "none";
+    renderAll();
+    alert("Clienta guardada.");
+  });
+
+  // ---------- Entregas view ----------
+  function renderEntregas(){
+    var tbody = document.getElementById("entregasTbody");
+    var list = orders.filter(function(o){ return o.entrega; }).sort(function(a,b){ return new Date(b.entrega.fecha) - new Date(a.entrega.fecha); });
+    tbody.innerHTML = list.map(function(o){
+      var ev = [];
+      if (o.entrega.fotoDataUrl) ev.push("Foto");
+      if (o.entrega.firmaDataUrl) ev.push("Firma");
+      return '<tr>' +
+        '<td>'+esc(o.code)+'</td>' +
+        '<td>'+esc(o.cliente)+'</td>' +
+        '<td>'+esc(o.entrega.receptor || '—')+'</td>' +
+        '<td>'+fmtDate(o.entrega.fecha)+'</td>' +
+        '<td>'+(ev.length ? ev.join(" + ") : '<span class="muted">Ninguna</span>')+'</td>' +
+        '<td><div class="btn-row"><button class="btn btn-sm" data-view-ev="'+o.id+'">Ver</button><button class="btn btn-sm" data-print-ev="'+o.id+'">Imprimir</button></div></td>' +
+      '</tr>';
+    }).join("");
+    document.getElementById("entregasEmpty").style.display = list.length ? "none" : "block";
+  }
+
+  document.getElementById("entregasTbody").addEventListener("click", function(e){
+    var vb = e.target.closest("button[data-view-ev]");
+    var pb = e.target.closest("button[data-print-ev]");
+    if (vb) {
+      var o = orders.find(function(x){ return x.id === vb.dataset.viewEv; });
+      if (o) showEvidenceModal(o);
+    }
+    if (pb) {
+      var o2 = orders.find(function(x){ return x.id === pb.dataset.printEv; });
+      if (o2) printEvidence(o2);
+    }
+  });
+
+  function showEvidenceModal(o){
+    document.getElementById("ovEvidenceBody").innerHTML =
+      '<div class="kv"><b>Orden</b><span>'+esc(o.code)+'</span></div>' +
+      '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
+      '<div class="kv"><b>Recibió</b><span>'+esc(o.entrega.receptor || '—')+'</span></div>' +
+      '<div class="kv"><b>Fecha</b><span>'+fmtDate(o.entrega.fecha)+'</span></div>' +
+      (o.entrega.fotoDataUrl ? '<div class="kv"><b>Foto</b><img class="thumb" src="'+o.entrega.fotoDataUrl+'"></div>' : '') +
+      (o.entrega.firmaDataUrl ? '<div class="kv"><b>Firma</b><img class="thumb" src="'+o.entrega.firmaDataUrl+'" style="background:#fff;"></div>' : '') +
+      '<div class="btn-row" style="margin-top:12px;"><button class="btn btn-primary" onclick="window.__aoriPrintEv(\''+o.id+'\')">Imprimir comprobante</button></div>';
+    openOverlay("ovEvidence");
+  }
+  window.__aoriPrintEv = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (o) printEvidence(o);
+  };
+
+  function printEvidence(o){
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Comprobante de entrega') +
+      '<div class="kv"><b>Orden</b><span>'+esc(o.code)+'</span></div>' +
+      '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
+      '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad?', '+esc(o.ciudad):'')+'</span></div>' +
+      '<div class="kv"><b>Recibió</b><span>'+esc(o.entrega.receptor || '—')+'</span></div>' +
+      '<div class="kv"><b>Fecha de entrega</b><span>'+fmtDate(o.entrega.fecha)+'</span></div>' +
+      (o.entrega.fotoDataUrl ? '<div><b class="small muted">FOTO DEL PAQUETE</b><br><img class="evidence" src="'+o.entrega.fotoDataUrl+'"></div>' : '') +
+      (o.entrega.firmaDataUrl ? '<div><b class="small muted">FIRMA</b><br><img class="evidence" src="'+o.entrega.firmaDataUrl+'" style="background:#fff;"></div>' : '') +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+
+  // ---------- Dashboard ----------
+  function renderDashboard(){
+    var counts = {pendiente:0, aprobado:0, empacado:0, en_ruta:0, entregado:0};
+    orders.forEach(function(o){ counts[o.estado] = (counts[o.estado]||0) + 1; });
+    var cardsHtml = [
+      {n: orders.length, l:"Órdenes totales"},
+      {n: counts.pendiente, l:"Pendientes"},
+      {n: counts.aprobado, l:"Aprobados"},
+      {n: counts.empacado, l:"Empacados"},
+      {n: counts.en_ruta, l:"En ruta"},
+      {n: counts.entregado, l:"Entregados"},
+      {n: getRutas().length, l:"Rutas activas"}
+    ].map(function(c){ return '<div class="card"><div class="num">'+c.n+'</div><div class="lbl">'+c.l+'</div></div>'; }).join("");
+    document.getElementById("dashCards").innerHTML = cardsHtml;
+
+    var tbody = document.querySelector("#dashTable tbody");
+    var recent = orders.slice(0, 8);
+    tbody.innerHTML = recent.map(function(o){
+      return '<tr><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+esc(o.ruta||'—')+'</td>' +
+        '<td><span class="badge badge-'+o.estado+'">'+estadoLabel(o.estado)+'</span></td><td>'+fmtDate(o.createdAt)+'</td></tr>';
+    }).join("");
+    document.getElementById("dashEmpty").style.display = orders.length ? "none" : "block";
+  }
+
+  // ---------- Pendientes (productos por surtir) ----------
+  function getPendienteOrders(){
+    return orders.filter(function(o){ return o.estado === "pendiente"; });
+  }
+
+  function fillPendClienteFiltro(){
+    var sel = document.getElementById("pendClienteFiltro");
+    var current = sel.value;
+    var list = clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    sel.innerHTML = '<option value="">Todas las clientas</option>' +
+      list.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.nombre)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  function getPendientesFiltrados(){
+    var clienteId = document.getElementById("pendClienteFiltro").value;
+    var list = getPendienteOrders();
+    if (clienteId) list = list.filter(function(o){ return o.clienteId === clienteId; });
+    return list;
+  }
+
+  function agruparPendientesPorCliente(list){
+    var byCliente = {};
+    list.forEach(function(o){
+      var key = o.clienteId || o.telefono || o.cliente;
+      if (!byCliente[key]) byCliente[key] = { nombre: o.cliente, orders: [] };
+      byCliente[key].orders.push(o);
+    });
+    return byCliente;
+  }
+
+  function contarProductosPendientes(list){
+    var counts = {};
+    list.forEach(function(o){
+      ensureOrderItems(o);
+      var textos = o.items.length ? o.items.map(function(it){ return it.texto; }) : [o.contenido].filter(Boolean);
+      textos.forEach(function(t){ counts[t] = (counts[t] || 0) + 1; });
+    });
+    return counts;
+  }
+
+  function renderPendientes(){
+    fillPendClienteFiltro();
+    var list = getPendientesFiltrados();
+    var resumenBox = document.getElementById("pendResumenBox");
+    var detalleBox = document.getElementById("pendDetalleBox");
+    if (!list.length) {
+      resumenBox.innerHTML = "";
+      detalleBox.innerHTML = "";
+      document.getElementById("pendEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("pendEmpty").style.display = "none";
+
+    var counts = contarProductosPendientes(list);
+    var countKeys = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; });
+    resumenBox.innerHTML = '<h3 style="font-size:13px;margin:14px 0 6px;">Resumen por producto ('+list.length+' orden(es) pendiente(s))</h3>' +
+      '<table><thead><tr><th>Producto</th><th>Veces pendiente</th></tr></thead><tbody>' +
+      countKeys.map(function(k){ return '<tr><td>'+esc(k)+'</td><td>'+counts[k]+'</td></tr>'; }).join("") +
+      '</tbody></table>';
+
+    var byCliente = agruparPendientesPorCliente(list);
+    var clienteKeys = Object.keys(byCliente).sort(function(a,b){ return byCliente[a].nombre.localeCompare(byCliente[b].nombre); });
+    detalleBox.innerHTML = '<h3 style="font-size:13px;margin:16px 0 6px;">Detalle por clienta</h3>' +
+      clienteKeys.map(function(k){
+        var g = byCliente[k];
+        var rows = g.orders.map(function(o){
+          ensureOrderItems(o);
+          var items = o.items.length ? o.items.map(function(it){ return it.texto; }).join(", ") : o.contenido;
+          var origen = o.origenOrdenCode ? ' <span class="muted small">(↳ desde '+esc(o.origenOrdenCode)+')</span>' : '';
+          return '<tr><td>'+esc(o.code)+origen+'</td><td>'+fmtDate(o.createdAt)+'</td><td>'+esc(items)+'</td></tr>';
+        }).join("");
+        return '<div class="route-group">' +
+          '<div class="route-head"><strong>'+esc(g.nombre)+'</strong><span class="small muted">'+g.orders.length+' orden(es) pendiente(s)</span></div>' +
+          '<table><thead><tr><th>Código</th><th>Fecha</th><th>Productos pendientes</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+        '</div>';
+      }).join("");
+  }
+  document.getElementById("pendClienteFiltro").addEventListener("change", renderPendientes);
+  document.getElementById("btnPrintPendientes").addEventListener("click", printPendientesReport);
+
+  function printPendientesReport(){
+    var list = getPendientesFiltrados();
+    if (!list.length) { alert("No hay productos pendientes con el filtro actual."); return; }
+    var clienteSel = document.getElementById("pendClienteFiltro");
+    var clienteNombre = clienteSel.value ? clienteSel.options[clienteSel.selectedIndex].text : "Todas las clientas";
+
+    var counts = contarProductosPendientes(list);
+    var countKeys = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; });
+    var resumenRows = countKeys.map(function(k){ return '<tr><td>'+esc(k)+'</td><td>'+counts[k]+'</td></tr>'; }).join("");
+
+    var byCliente = agruparPendientesPorCliente(list);
+    var clienteKeys = Object.keys(byCliente).sort(function(a,b){ return byCliente[a].nombre.localeCompare(byCliente[b].nombre); });
+    var detail = clienteKeys.map(function(k){
+      var g = byCliente[k];
+      var rows = g.orders.map(function(o){
+        ensureOrderItems(o);
+        var items = o.items.length ? o.items.map(function(it){ return it.texto; }).join(", ") : o.contenido;
+        var origen = o.origenOrdenCode ? (' (desde '+o.origenOrdenCode+')') : '';
+        return '<tr><td>'+esc(o.code + origen)+'</td><td>'+fmtDate(o.createdAt)+'</td><td>'+esc(items)+'</td></tr>';
+      }).join("");
+      return '<h2 class="zona-title">'+esc(g.nombre)+' ('+g.orders.length+' orden(es))</h2>' +
+        '<table><thead><tr><th>Código</th><th>Fecha</th><th>Productos pendientes</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    }).join("");
+
+    var html = '<div class="report-page">' +
+      docHeaderHtml('Reporte de productos pendientes por surtir') +
+      '<div class="muted">Generado: '+fmtDate(new Date().toISOString())+' · '+esc(clienteNombre)+' · '+list.length+' orden(es) pendiente(s)</div>' +
+      '<h2 class="zona-title">Resumen por producto</h2>' +
+      '<table class="summary"><thead><tr><th>Producto</th><th>Veces pendiente</th></tr></thead><tbody>'+resumenRows+'</tbody></table>' +
+      detail +
+    '</div>';
+    document.getElementById("print-area").innerHTML = html;
+    setPageSize("A4");
+    setTimeout(function(){ window.print(); }, 50);
+  }
+
+  function renderAll(){
+    fillRutaOptions();
+    fillVendedorFilters();
+    fillClienteSelectForm();
+    renderZonaManager();
+    renderVendedorManager();
+    renderClientesManager();
+    renderReportZonaChecks();
+    renderVendedorStats();
+    renderDashboard();
+    renderOrdersTable();
+    renderRutas();
+    renderPendientes();
+    renderEntregas();
+  }
+
+  // ---------- Sincronización en tiempo real con Firestore ----------
+  // Se activa una sola vez, justo después de iniciar sesión (ver auth.onAuthStateChanged
+  // más arriba). Cada vez que cualquiera de las 4 personas del equipo cambia algo,
+  // estos listeners actualizan los arreglos locales y vuelven a dibujar la pantalla.
+  var __unsubs = [];
+  window.__aoriStartSync = function(){
+    if (__unsubs.length) return; // ya está sincronizando
+    __unsubs.push(
+      db.collection("orders").orderBy("createdAt", "desc").onSnapshot(function(snap){
+        orders = snap.docs.map(function(d){ return ensureOrderItems(d.data()); });
+        renderAll();
+      }, function(err){
+        console.error("Error sincronizando órdenes:", err);
+      })
+    );
+    __unsubs.push(
+      db.collection("catalogos").doc(CATALOGOS_DOC).onSnapshot(function(doc){
+        var d = doc.data() || {};
+        zonas = d.zonas || [];
+        vendedores = d.vendedores || [];
+        clientes = d.clientes || [];
+        renderAll();
+      }, function(err){
+        console.error("Error sincronizando catálogos:", err);
+      })
+    );
+  };
+  window.__aoriStopSync = function(){
+    __unsubs.forEach(function(fn){ fn(); });
+    __unsubs = [];
+    orders = []; zonas = []; vendedores = []; clientes = [];
+  };
+
+  // ---------- Migración de datos guardados localmente antes de pasarnos a la nube ----------
+  // Botón de un solo uso: sube a Firestore lo que este navegador tenía guardado en
+  // localStorage (de cuando el sistema todavía no era multiusuario), sin duplicar
+  // nada si ya se corrió antes o si esas órdenes ya existen en la nube.
+  function migrarDatosLocales(){
+    var legacy = readLocalLegacyData();
+    var totalLocal = legacy.orders.length + legacy.zonas.length + legacy.vendedores.length + legacy.clientes.length;
+    if (!totalLocal) { alert("Este navegador no tiene datos guardados localmente para migrar."); return; }
+    if (!confirm(
+      "Se van a subir a la nube: " + legacy.orders.length + " orden(es), " + legacy.zonas.length + " zona(s), " +
+      legacy.vendedores.length + " vendedor(es) y " + legacy.clientes.length + " clienta(s) guardadas en ESTE navegador.\n\n" +
+      "Si una orden ya existe en la nube (mismo código), no se duplica. ¿Continuar?"
+    )) return;
+
+    var existingCodes = {};
+    orders.forEach(function(o){ existingCodes[o.code] = true; });
+    var ordersToUpload = legacy.orders.filter(function(o){ return !existingCodes[o.code]; });
+
+    var batchPromises = ordersToUpload.map(function(o){ return saveOrder(o); });
+
+    Promise.all(batchPromises).then(function(){
+      var mergedZonas = zonas.slice();
+      legacy.zonas.forEach(function(z){ if (mergedZonas.indexOf(z) === -1) mergedZonas.push(z); });
+      var mergedVendedores = vendedores.slice();
+      legacy.vendedores.forEach(function(v){
+        var yaExiste = mergedVendedores.some(function(x){ return x.nombre === v.nombre; });
+        if (!yaExiste) mergedVendedores.push(v);
+      });
+      var mergedClientes = clientes.slice();
+      legacy.clientes.forEach(function(c){
+        var yaExiste = mergedClientes.some(function(x){ return String(x.telefono||"") === String(c.telefono||""); });
+        if (!yaExiste) mergedClientes.push(c);
+      });
+      return Promise.all([saveZonas(mergedZonas), saveVendedores(mergedVendedores), saveClientes(mergedClientes)]);
+    }).then(function(){
+      alert("Migración completa: " + ordersToUpload.length + " orden(es) nueva(s) subida(s) a la nube (las que ya existían se omitieron).");
+    }).catch(function(err){
+      console.error(err);
+      alert("Hubo un problema durante la migración. Revisa tu conexión e intenta de nuevo.");
+    });
+  }
+  var btnMigrar = document.getElementById("btnMigrarDatosLocales");
+  if (btnMigrar) btnMigrar.addEventListener("click", migrarDatosLocales);
+
+  document.getElementById("brandLogoSlot").innerHTML = aoriLogoSvg("92px", "#a8452a");
+  document.getElementById("loginLogoSlot").innerHTML = aoriLogoSvg("130px", "#a8452a");
+  renderAll();
+})();
+</script>
+</body>
+</html>
