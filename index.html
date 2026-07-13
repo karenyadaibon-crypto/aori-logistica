@@ -640,6 +640,13 @@
       var badge = document.getElementById("userBadge");
       if (badge) badge.textContent = user.email || "";
       loginForm.reset();
+      db.collection("users").doc(user.uid).get().then(function(doc){
+        window.__aoriRole = (doc.exists && doc.data().role) || "admin";
+      }).catch(function(){
+        window.__aoriRole = "admin";
+      }).finally(function(){
+        if (window.__aoriApplyRole) window.__aoriApplyRole();
+      });
       if (window.__aoriStartSync) window.__aoriStartSync();
     } else {
       document.getElementById("app").style.display = "none";
@@ -714,9 +721,12 @@
   // ---------- Persistencia en la nube (Firestore) ----------
   // "orders" es una colección real (un documento por orden) para que varias personas
   // puedan editar órdenes distintas al mismo tiempo sin pisarse los cambios.
-  // "catalogos/data" guarda zonas/vendedores/clientas juntos en un solo documento,
-  // porque se editan poco y así es más simple.
+  // "catalogos/data" guarda zonas/clientas juntos en un solo documento (se editan poco).
+  // "catalogos/vendedores" va en SU PROPIO documento, aparte, porque las reglas de
+  // seguridad de Firestore solo pueden restringir por documento completo, no por campo:
+  // así se puede dar acceso a vendedores solo a cuentas con rol "admin" (ver más abajo).
   var CATALOGOS_DOC = "data";
+  var VENDEDORES_DOC = "vendedores";
 
   function saveOrder(o){
     ensureOrderItems(o);
@@ -754,9 +764,13 @@
     });
   }
   function saveVendedores(list){
-    return db.collection("catalogos").doc(CATALOGOS_DOC).set({ vendedores: list }, { merge: true }).catch(function(err){
+    return db.collection("catalogos").doc(VENDEDORES_DOC).set({ vendedores: list }, { merge: true }).catch(function(err){
       console.error("No se pudieron guardar los vendedores:", err);
-      alert("No se pudieron guardar los vendedores (revisa tu conexión).");
+      if (err && err.code === "permission-denied") {
+        alert("Tu cuenta no tiene permiso para editar vendedores.");
+      } else {
+        alert("No se pudieron guardar los vendedores (revisa tu conexión).");
+      }
     });
   }
   function saveClientes(list){
@@ -2332,9 +2346,29 @@
   // Se activa una sola vez, justo después de iniciar sesión (ver auth.onAuthStateChanged
   // más arriba). Cada vez que cualquiera de las 4 personas del equipo cambia algo,
   // estos listeners actualizan los arreglos locales y vuelven a dibujar la pantalla.
+  // Mueve, una sola vez, los vendedores que hayan quedado guardados en catalogos/data
+  // (formato viejo) a su propio documento catalogos/vendedores (formato nuevo, con
+  // reglas de seguridad aparte). Si algo falla (por ejemplo por permisos, en una
+  // cuenta con rol "limitado"), simplemente no hace nada — no es grave.
+  function migrarVendedoresADocumentoPropio(){
+    var vendedoresRef = db.collection("catalogos").doc(VENDEDORES_DOC);
+    var dataRef = db.collection("catalogos").doc(CATALOGOS_DOC);
+    vendedoresRef.get().then(function(vDoc){
+      if (vDoc.exists) return;
+      return dataRef.get().then(function(dDoc){
+        var d = dDoc.data() || {};
+        if (!d.vendedores || !d.vendedores.length) return;
+        return vendedoresRef.set({ vendedores: d.vendedores }).then(function(){
+          return dataRef.update({ vendedores: firebase.firestore.FieldValue.delete() });
+        });
+      });
+    }).catch(function(err){ console.error("Migración de vendedores (no crítico):", err); });
+  }
+
   var __unsubs = [];
   window.__aoriStartSync = function(){
     if (__unsubs.length) return; // ya está sincronizando
+    migrarVendedoresADocumentoPropio();
     __unsubs.push(
       db.collection("orders").orderBy("createdAt", "desc").onSnapshot(function(snap){
         orders = snap.docs.map(function(d){ return ensureOrderItems(d.data()); });
@@ -2347,11 +2381,21 @@
       db.collection("catalogos").doc(CATALOGOS_DOC).onSnapshot(function(doc){
         var d = doc.data() || {};
         zonas = d.zonas || [];
-        vendedores = d.vendedores || [];
         clientes = d.clientes || [];
         renderAll();
       }, function(err){
         console.error("Error sincronizando catálogos:", err);
+      })
+    );
+    __unsubs.push(
+      db.collection("catalogos").doc(VENDEDORES_DOC).onSnapshot(function(doc){
+        var d = doc.data() || {};
+        vendedores = d.vendedores || [];
+        renderAll();
+      }, function(err){
+        // Esperado para cuentas con rol "limitado": no tienen permiso de leer vendedores.
+        vendedores = [];
+        renderAll();
       })
     );
   };
@@ -2359,6 +2403,24 @@
     __unsubs.forEach(function(fn){ fn(); });
     __unsubs = [];
     orders = []; zonas = []; vendedores = []; clientes = [];
+  };
+
+  // ---------- Roles de acceso ----------
+  // Por defecto cualquier cuenta tiene acceso completo ("admin"). Solo las cuentas que
+  // Karen marque manualmente con role:"limitado" (en Firestore, colección "users",
+  // documento = su UID) pierden la pestaña de Vendedores. La restricción real la hacen
+  // las reglas de seguridad; esto de aquí solo oculta el botón para que no confunda.
+  window.__aoriApplyRole = function(){
+    var role = window.__aoriRole || "admin";
+    var tabBtn = document.querySelector('button[data-view="vendedores"]');
+    if (!tabBtn) return;
+    tabBtn.style.display = (role === "limitado") ? "none" : "";
+    if (role === "limitado" && document.getElementById("view-vendedores").classList.contains("active")) {
+      tabBtn.classList.remove("active");
+      document.getElementById("view-vendedores").classList.remove("active");
+      document.querySelector('button[data-view="dashboard"]').classList.add("active");
+      document.getElementById("view-dashboard").classList.add("active");
+    }
   };
 
   // ---------- Migración de datos guardados localmente antes de pasarnos a la nube ----------
@@ -2412,4 +2474,3 @@
 </script>
 </body>
 </html>
-
