@@ -342,6 +342,7 @@
             <select name="tamano">
               <option value="big">Grande 10x15cm (envío)</option>
               <option value="small">Pequeña 5x3cm (empaque)</option>
+              <option value="a4cuarto">Cuarto de hoja A4, esquina superior (impresora normal)</option>
             </select>
           </div>
         </div>
@@ -1451,8 +1452,9 @@
           '<div class="field"><label>Fecha de envío / entrega</label><input type="date" name="fechaEnvio" value="'+esc(o.fechaEnvio || '')+'"></div>' +
           '<div class="field"><label>Tamaño de etiqueta</label>' +
             '<select name="tamano">' +
-              '<option value="big"'+(o.tamano!=='small'?' selected':'')+'>Grande 10x15cm (envío)</option>' +
+              '<option value="big"'+((!o.tamano || o.tamano==='big')?' selected':'')+'>Grande 10x15cm (envío)</option>' +
               '<option value="small"'+(o.tamano==='small'?' selected':'')+'>Pequeña 5x3cm (empaque)</option>' +
+              '<option value="a4cuarto"'+(o.tamano==='a4cuarto'?' selected':'')+'>Cuarto de hoja A4, esquina superior (impresora normal)</option>' +
             '</select>' +
           '</div>' +
         '</div>' +
@@ -1506,7 +1508,8 @@
   // ---------- Construcción de etiquetas ----------
   function buildLabelPages(list){
     var pages = list.map(function(o){
-      var big = o.tamano !== "small";
+      var esA4Cuarto = o.tamano === "a4cuarto";
+      var big = o.tamano !== "small"; // "big" y "a4cuarto" comparten el mismo contenido/estilo, solo cambia el papel
       var cls = big ? "label-big" : "label-small";
       var size = big ? "100mm 150mm" : "50mm 30mm";
       var tipo = o.tipoEntrega || "envio";
@@ -1541,9 +1544,19 @@
         transpLine +
         '<div class="lbl-line">Envío: '+envioTxt+'</div>'
       );
+      if (esA4Cuarto) {
+        // Papel completo A4; el contenido de la etiqueta va solo en el cuarto superior izquierdo.
+        return '<div class="label-page" style="width:210mm;height:297mm;padding:0;">' +
+          '<div class="'+cls+'" style="width:105mm;height:148mm;box-sizing:border-box;padding:4mm;overflow:hidden;">' + content + '</div>' +
+        '</div>';
+      }
       return '<div class="label-page '+cls+'" style="width:'+size.split(' ')[0]+';height:'+size.split(' ')[1]+';">'+content+'</div>';
     }).join("");
-    var firstSize = (list.length && list[0].tamano !== "small") ? "100mm 150mm" : "50mm 30mm";
+    var firstSize = "100mm 150mm";
+    if (list.length) {
+      if (list[0].tamano === "small") firstSize = "50mm 30mm";
+      else if (list[0].tamano === "a4cuarto") firstSize = "A4";
+    }
     return { pagesHtml: pages, firstSize: firstSize };
   }
 
