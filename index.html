@@ -297,6 +297,11 @@
       <p class="muted small" style="margin-bottom:10px;">Solo se usa una vez: sube a la nube las órdenes, zonas, vendedores y clientas que ya tenías guardadas en este navegador antes de pasarnos a Firebase. Es seguro correrlo varias veces — no duplica lo que ya está en la nube.</p>
       <button class="btn btn-primary" id="btnMigrarDatosLocales">Migrar datos locales a la nube</button>
     </div>
+    <div class="panel">
+      <h2 style="margin-bottom:4px;">Importar órdenes desde Excel</h2>
+      <p class="muted small" style="margin-bottom:10px;">Sube un archivo de Excel con varias órdenes de una vez (formato de bloques: clienta + sus productos debajo).</p>
+      <button class="btn btn-primary" id="btnAbrirImport">Importar órdenes desde Excel</button>
+    </div>
     <div class="cards" id="dashCards"></div>
     <div class="panel">
       <h2>Últimas órdenes</h2>
@@ -590,11 +595,31 @@
   </div>
 </div>
 
+<!-- Modal: Importar órdenes desde Excel -->
+<div class="overlay" id="ovImport">
+  <div class="modal wide">
+    <div class="modal-head"><h2>Importar órdenes desde Excel</h2><button class="modal-close" data-close="ovImport">✕</button></div>
+    <p class="muted small">Sube un archivo .xlsx donde cada clienta tiene su nombre, teléfono y dirección en la primera fila de su bloque, y los productos en las filas de abajo (con cantidad, producto y tienda). Así vienen tus archivos de "ENVIOS".</p>
+    <div class="field"><label>Archivo Excel (.xlsx)</label><input type="file" id="importFileInput" accept=".xlsx,.xls"></div>
+    <div id="importSummary" class="muted small" style="margin:8px 0;"></div>
+    <div id="importPreviewBox" style="max-height:320px;overflow:auto;"></div>
+    <label class="small" style="display:flex;align-items:center;gap:6px;margin-top:14px;color:var(--danger);">
+      <input type="checkbox" id="importBorrarPrevias"> Borrar las órdenes que ya existen y dejar solo las de este archivo (solo se borran si la importación termina bien)
+    </label>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" id="btnConfirmarImport" disabled>Confirmar e importar</button>
+      <button class="btn" data-close="ovImport">Cancelar</button>
+    </div>
+    <div id="importProgress" class="muted small" style="margin-top:10px;"></div>
+  </div>
+</div>
+
 <div id="print-area"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   var firebaseConfig = {
     apiKey: "AIzaSyBW0o7GLaxP3PM7TkcobKYhjQsAzkknHVk",
@@ -2479,6 +2504,195 @@
   }
   var btnMigrar = document.getElementById("btnMigrarDatosLocales");
   if (btnMigrar) btnMigrar.addEventListener("click", migrarDatosLocales);
+
+  // ---------- Importar órdenes desde Excel ----------
+  // Formato esperado (como las hojas "ENVIOS ..." de Karen): cada clienta ocupa un
+  // bloque de filas — la primera fila del bloque trae CLIENTA / TELEFONO / DIRECCION,
+  // y esa fila y las siguientes traen, cada una, un producto (columnas: cantidad,
+  // pedido/producto, tienda). El bloque de una clienta termina cuando aparece la
+  // siguiente clienta (columna A con nombre) o se acaban las filas.
+  var __importParsedOrders = [];
+
+  function procesarFilaExcel(rows){
+    // rows: array de arrays (una por fila), rows[0] son encabezados (se ignoran).
+    var out = [];
+    var actual = null;
+    for (var i = 1; i < rows.length; i++){
+      var row = rows[i] || [];
+      var colCliente = row[0], colTelefono = row[1], colDireccion = row[2],
+          colCantidad = row[3], colProducto = row[4], colTienda = row[5];
+      var tieneCliente = colCliente !== undefined && colCliente !== null && String(colCliente).trim() !== "";
+      var tieneProducto = colProducto !== undefined && colProducto !== null && String(colProducto).trim() !== "";
+      if (tieneCliente) {
+        if (actual && actual.items.length) out.push(actual);
+        actual = {
+          cliente: String(colCliente).trim(),
+          telefono: colTelefono ? String(colTelefono).trim() : "",
+          direccion: colDireccion ? String(colDireccion).trim().replace(/\s*\n\s*/g, ", ") : "",
+          items: []
+        };
+      }
+      if (tieneProducto && actual) {
+        var cantidad = (colCantidad !== undefined && colCantidad !== null && colCantidad !== "") ? Number(colCantidad) : 1;
+        if (!isFinite(cantidad) || cantidad <= 0) cantidad = 1;
+        var cantidadTxt = (Math.round(cantidad * 100) / 100).toString().replace(/\.0+$/, "");
+        var tiendaTxt = (colTienda && String(colTienda).trim()) ? " (" + String(colTienda).trim() + ")" : "";
+        actual.items.push(cantidadTxt + " " + String(colProducto).trim() + tiendaTxt);
+      }
+    }
+    if (actual && actual.items.length) out.push(actual);
+    return out;
+  }
+
+  document.getElementById("importFileInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    var summaryBox = document.getElementById("importSummary");
+    var previewBox = document.getElementById("importPreviewBox");
+    var btnConfirmar = document.getElementById("btnConfirmarImport");
+    btnConfirmar.disabled = true;
+    previewBox.innerHTML = "";
+    __importParsedOrders = [];
+    if (!file) return;
+    if (typeof XLSX === "undefined") {
+      summaryBox.textContent = "No se pudo cargar el lector de Excel (revisa tu conexión a internet) — intenta recargar la página.";
+      return;
+    }
+    summaryBox.textContent = "Leyendo archivo...";
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      try {
+        var data = new Uint8Array(evt.target.result);
+        var wb = XLSX.read(data, { type: "array" });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+        var parsed = procesarFilaExcel(rows);
+        __importParsedOrders = parsed;
+        if (!parsed.length) {
+          summaryBox.textContent = "No se encontraron órdenes en este archivo. Revisa que tenga el formato esperado (clienta en columna A, producto en columna E).";
+          return;
+        }
+        var totalProductos = parsed.reduce(function(s, o){ return s + o.items.length; }, 0);
+        summaryBox.textContent = "Se encontraron " + parsed.length + " orden(es) con " + totalProductos + " producto(s) en total. Revisa la vista previa antes de confirmar.";
+        previewBox.innerHTML = '<table><thead><tr><th>#</th><th>Cliente</th><th>Teléfono</th><th>Dirección</th><th>Productos</th></tr></thead><tbody>' +
+          parsed.map(function(o, idx){
+            return '<tr><td>'+(idx+1)+'</td><td>'+esc(o.cliente)+'</td><td>'+esc(o.telefono||'—')+'</td>' +
+              '<td style="max-width:220px;">'+esc(o.direccion||'—')+'</td>' +
+              '<td>'+esc(o.items.join(" · "))+'</td></tr>';
+          }).join("") +
+          '</tbody></table>';
+        btnConfirmar.disabled = false;
+      } catch (err) {
+        console.error(err);
+        summaryBox.textContent = "No se pudo leer el archivo. Confirma que sea un .xlsx válido.";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  // Ejecuta fn(item, index) para cada elemento de la lista, uno a la vez (en orden),
+  // llamando a onProgress después de cada uno. Devuelve una promesa con los resultados.
+  function procesarSecuencial(list, fn, onProgress){
+    var results = [];
+    var p = Promise.resolve();
+    list.forEach(function(item, idx){
+      p = p.then(function(){ return fn(item, idx); }).then(function(r){
+        results.push(r);
+        if (onProgress) onProgress(idx + 1, list.length);
+      });
+    });
+    return p.then(function(){ return results; });
+  }
+
+  document.getElementById("btnConfirmarImport").addEventListener("click", function(){
+    if (!__importParsedOrders.length) return;
+    var borrarPrevias = document.getElementById("importBorrarPrevias").checked;
+    var progressBox = document.getElementById("importProgress");
+    var idsAntes = orders.map(function(o){ return o.id; });
+
+    var mensajeConfirm = "Se van a crear " + __importParsedOrders.length + " orden(es) nueva(s) a partir del Excel.";
+    if (borrarPrevias) {
+      mensajeConfirm += "\n\nDespués, se van a BORRAR las " + idsAntes.length + " orden(es) que ya existen actualmente (solo si la importación termina sin errores). Esta acción no se puede deshacer.";
+    }
+    if (!confirm(mensajeConfirm + "\n\n¿Continuar?")) return;
+    if (borrarPrevias) {
+      if (prompt('Para confirmar que quieres BORRAR las ' + idsAntes.length + ' órdenes actuales, escribe BORRAR (en mayúsculas):') !== "BORRAR") {
+        alert("No se escribió BORRAR exactamente — se cancela el borrado. Se importarán las órdenes nuevas de todas formas, sin borrar nada.");
+        borrarPrevias = false;
+      }
+    }
+
+    var btnConfirmar = document.getElementById("btnConfirmarImport");
+    btnConfirmar.disabled = true;
+    progressBox.textContent = "Importando 0 / " + __importParsedOrders.length + "...";
+
+    procesarSecuencial(__importParsedOrders, function(o){
+      return genCode().then(function(code){
+        var nuevo = {
+          id: "o_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          code: code,
+          createdAt: new Date().toISOString(),
+          cliente: o.cliente,
+          telefono: o.telefono,
+          direccion: o.direccion,
+          ciudad: "",
+          ruta: "",
+          contenido: o.items.join("\n"),
+          notas: "Importada desde Excel.",
+          tamano: "big",
+          tipoEntrega: "envio",
+          fechaEnvio: "",
+          vendedor: "",
+          valorVenta: 0,
+          tipoHistorial: [],
+          guia: null,
+          estado: "pendiente",
+          entrega: null,
+          items: itemsFromContenido(o.items.join("\n"), false),
+          origenOrdenId: null,
+          origenOrdenCode: null,
+          derivadaOrdenId: null,
+          derivadaOrdenCode: null
+        };
+        nuevo.clienteId = findOrCreateCliente(nuevo.cliente, nuevo.telefono, nuevo.direccion, nuevo.ciudad, nuevo.ruta);
+        return saveOrder(nuevo);
+      });
+    }, function(done, total){
+      progressBox.textContent = "Importando " + done + " / " + total + "...";
+    }).then(function(){
+      if (!borrarPrevias) {
+        progressBox.textContent = "";
+        alert("Importación completa: " + __importParsedOrders.length + " orden(es) creada(s).");
+        document.getElementById("ovImport").classList.remove("open");
+        return;
+      }
+      progressBox.textContent = "Borrando órdenes anteriores...";
+      return procesarSecuencial(idsAntes, function(id){ return deleteOrderDoc(id); }, function(done, total){
+        progressBox.textContent = "Borrando " + done + " / " + total + "...";
+      }).then(function(){
+        progressBox.textContent = "";
+        alert("Importación completa: " + __importParsedOrders.length + " orden(es) creada(s), " + idsAntes.length + " orden(es) anteriores borradas.");
+        document.getElementById("ovImport").classList.remove("open");
+      });
+    }).catch(function(err){
+      console.error(err);
+      progressBox.textContent = "";
+      alert("Hubo un problema durante la importación. Revisa tu conexión — las órdenes que ya se alcanzaron a crear quedaron guardadas, puedes volver a intentar con el resto.");
+    }).finally(function(){
+      btnConfirmar.disabled = false;
+    });
+  });
+
+  var btnAbrirImport = document.getElementById("btnAbrirImport");
+  if (btnAbrirImport) btnAbrirImport.addEventListener("click", function(){
+    document.getElementById("importFileInput").value = "";
+    document.getElementById("importSummary").textContent = "";
+    document.getElementById("importPreviewBox").innerHTML = "";
+    document.getElementById("importProgress").textContent = "";
+    document.getElementById("importBorrarPrevias").checked = false;
+    document.getElementById("btnConfirmarImport").disabled = true;
+    __importParsedOrders = [];
+    openOverlay("ovImport");
+  });
 
   document.getElementById("brandLogoSlot").innerHTML = aoriLogoSvg("92px", "#a8452a");
   document.getElementById("loginLogoSlot").innerHTML = aoriLogoSvg("130px", "#a8452a");
