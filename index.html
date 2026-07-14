@@ -518,6 +518,9 @@
         <div class="row">
           <div class="field" style="flex:2;"><label>Dirección</label><input name="direccion" placeholder="Calle, número, referencia"></div>
           <div class="field"><label>Ciudad</label><input name="ciudad" placeholder="Ciudad"></div>
+          <div class="field"><label>Estado</label><select name="estado" id="clienteEstadoSelect"></select></div>
+        </div>
+        <div class="row">
           <div class="field"><label>Ruta / Zona de envío</label><input name="ruta" list="rutaList" placeholder="Ej. Norte, Centro, Nacional - Cali"></div>
         </div>
         <div class="field"><label>Notas (tallas, preferencias, etc.)</label><textarea name="notas" placeholder="Ej. talla M, le gustan los tonos tierra..."></textarea></div>
@@ -534,7 +537,7 @@
         <div class="field"><label>Buscar</label><input id="fClienteBusca" placeholder="Nombre o teléfono"></div>
       </div>
       <table>
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Ruta</th><th>Órdenes</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Estado</th><th>Ruta</th><th>Órdenes</th><th>Acciones</th></tr></thead>
         <tbody id="clientesTbody"></tbody>
       </table>
       <div class="empty" id="clientesEmpty" style="display:none;">Aún no has cargado clientas.</div>
@@ -1014,6 +1017,17 @@
     var sel = document.getElementById("fRuta");
     var current = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' + rutas.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  var ESTADOS_MX = ["Aguascalientes","Baja California","Baja California Sur","Campeche","Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango","Estado de México","Guanajuato","Guerrero","Hidalgo","Jalisco","Michoacán","Morelos","Nayarit","Nuevo León","Oaxaca","Puebla","Querétaro","Quintana Roo","San Luis Potosí","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas"];
+
+  function fillEstadoOptions(){
+    var sel = document.getElementById("clienteEstadoSelect");
+    if (!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Selecciona un estado —</option>' +
+      ESTADOS_MX.map(function(e){ return '<option value="'+esc(e)+'">'+esc(e)+'</option>'; }).join("");
     sel.value = current;
   }
 
@@ -2076,7 +2090,8 @@
         '<td>'+esc(c.telefono)+'</td>' +
         '<td>'+esc(c.direccion || '—')+'</td>' +
         '<td>'+esc(c.ciudad || '—')+'</td>' +
-        '<td>'+esc(c.ruta || '—')+'</td>' +
+        '<td>'+esc(c.estado || '—')+'</td>' +
+        '<td><input class="ruta-inline-edit" style="width:100%;min-width:110px;" list="rutaList" data-ruta-cliente="'+esc(c.id)+'" value="'+esc(c.ruta || '')+'" placeholder="Sin asignar"></td>' +
         '<td>'+contarOrdenesCliente(c)+'</td>' +
         '<td><div class="btn-row">' +
           '<button class="btn btn-sm" data-edit-cliente="'+esc(c.id)+'">Editar</button>' +
@@ -2086,6 +2101,17 @@
     }).join("");
   }
   document.getElementById("fClienteBusca").addEventListener("input", renderClientesManager);
+
+  document.getElementById("clientesTbody").addEventListener("change", function(e){
+    var rutaInput = e.target.closest("[data-ruta-cliente]");
+    if (!rutaInput) return;
+    var cid = rutaInput.dataset.rutaCliente;
+    var c = clientes.find(function(x){ return x.id === cid; });
+    if (!c) return;
+    c.ruta = rutaInput.value.trim();
+    saveClientes(clientes);
+    fillRutaOptions();
+  });
 
   document.getElementById("clientesTbody").addEventListener("click", function(e){
     var editBtn = e.target.closest("[data-edit-cliente]");
@@ -2099,6 +2125,7 @@
       f.telefono.value = c.telefono;
       f.direccion.value = c.direccion || "";
       f.ciudad.value = c.ciudad || "";
+      f.estado.value = c.estado || "";
       f.ruta.value = c.ruta || "";
       f.notas.value = c.notas || "";
       document.getElementById("clienteFormTitle").textContent = "Editar clienta — " + c.nombre;
@@ -2134,6 +2161,7 @@
         c.telefono = f.telefono.value.trim();
         c.direccion = f.direccion.value.trim();
         c.ciudad = f.ciudad.value.trim();
+        c.estado = f.estado.value.trim();
         c.ruta = f.ruta.value.trim();
         c.notas = f.notas.value.trim();
       }
@@ -2144,6 +2172,7 @@
         telefono: f.telefono.value.trim(),
         direccion: f.direccion.value.trim(),
         ciudad: f.ciudad.value.trim(),
+        estado: f.estado.value.trim(),
         ruta: f.ruta.value.trim(),
         notas: f.notas.value.trim(),
         createdAt: new Date().toISOString()
@@ -2366,6 +2395,7 @@
 
   function renderAll(){
     fillRutaOptions();
+    fillEstadoOptions();
     fillVendedorFilters();
     fillClienteSelectForm();
     renderZonaManager();
