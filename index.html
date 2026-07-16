@@ -396,7 +396,11 @@
         </div>
         <div class="field"><label>Ruta</label><select id="fRuta"><option value="">Todas</option></select></div>
         <div class="field"><label>Vendedor</label><select id="fVendedor"><option value="">Todos</option></select></div>
+        <div class="field"><label>Clienta</label><select id="fClienteFiltro"><option value="">Todas</option></select></div>
+        <div class="field"><label>Desde</label><input type="date" id="fFechaDesde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="fFechaHasta"></div>
         <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente o código"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFiltrosOrdenes">Limpiar filtros</button></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
       </div>
       <table>
@@ -998,7 +1002,30 @@
   document.getElementById("fTipo").addEventListener("change", renderOrdersTable);
   document.getElementById("fRuta").addEventListener("change", renderOrdersTable);
   document.getElementById("fVendedor").addEventListener("change", renderOrdersTable);
+  document.getElementById("fClienteFiltro").addEventListener("change", renderOrdersTable);
+  document.getElementById("fFechaDesde").addEventListener("change", renderOrdersTable);
+  document.getElementById("fFechaHasta").addEventListener("change", renderOrdersTable);
   document.getElementById("fBusca").addEventListener("input", renderOrdersTable);
+  document.getElementById("btnLimpiarFiltrosOrdenes").addEventListener("click", function(){
+    document.getElementById("fEstado").value = "";
+    document.getElementById("fTipo").value = "";
+    document.getElementById("fRuta").value = "";
+    document.getElementById("fVendedor").value = "";
+    document.getElementById("fClienteFiltro").value = "";
+    document.getElementById("fFechaDesde").value = "";
+    document.getElementById("fFechaHasta").value = "";
+    document.getElementById("fBusca").value = "";
+    renderOrdersTable();
+  });
+
+  function fillClienteFiltroOrdenes(){
+    var sel = document.getElementById("fClienteFiltro");
+    var current = sel.value;
+    var list = clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    sel.innerHTML = '<option value="">Todas</option>' +
+      list.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.nombre)+'</option>'; }).join("");
+    sel.value = current;
+  }
   document.getElementById("selAll").addEventListener("change", function(e){
     Array.prototype.forEach.call(document.querySelectorAll(".rowSel"), function(cb){ cb.checked = e.target.checked; });
   });
@@ -1168,12 +1195,21 @@
     var ft = document.getElementById("fTipo").value;
     var fr = document.getElementById("fRuta").value;
     var fv = document.getElementById("fVendedor").value;
+    var fc = document.getElementById("fClienteFiltro").value;
+    var fd = document.getElementById("fFechaDesde").value; // "YYYY-MM-DD" o ""
+    var fh = document.getElementById("fFechaHasta").value;
     var fb = document.getElementById("fBusca").value.toLowerCase().trim();
     return orders.filter(function(o){
       if (fe && o.estado !== fe) return false;
       if (ft && (o.tipoEntrega || "envio") !== ft) return false;
       if (fr && o.ruta !== fr) return false;
       if (fv && (o.vendedor || "") !== fv) return false;
+      if (fc && o.clienteId !== fc) return false;
+      if (fd || fh) {
+        var fechaOrden = (o.createdAt || "").slice(0, 10);
+        if (fd && fechaOrden && fechaOrden < fd) return false;
+        if (fh && fechaOrden && fechaOrden > fh) return false;
+      }
       if (fb && !(o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1)) return false;
       return true;
     });
@@ -2415,6 +2451,7 @@
     fillEstadoOptions();
     fillVendedorFilters();
     fillClienteSelectForm();
+    fillClienteFiltroOrdenes();
     renderZonaManager();
     renderVendedorManager();
     renderClientesManager();
@@ -2455,8 +2492,17 @@
     if (__unsubs.length) return; // ya está sincronizando
     migrarVendedoresADocumentoPropio();
     __unsubs.push(
-      db.collection("orders").orderBy("createdAt", "desc").onSnapshot(function(snap){
+      // Nota: NO se usa .orderBy("createdAt") aquí a propósito — Firestore excluye en
+      // silencio cualquier documento que no tenga ese campo (por ejemplo, órdenes muy
+      // antiguas de antes de la migración). Traemos todo y ordenamos en el navegador.
+      db.collection("orders").onSnapshot(function(snap){
         orders = snap.docs.map(function(d){ return ensureOrderItems(d.data()); });
+        orders.sort(function(a, b){
+          var da = a.createdAt || "";
+          var db_ = b.createdAt || "";
+          if (da === db_) return 0;
+          return da < db_ ? 1 : -1; // más reciente primero
+        });
         renderAll();
       }, function(err){
         console.error("Error sincronizando órdenes:", err);
