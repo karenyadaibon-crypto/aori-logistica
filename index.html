@@ -537,7 +537,7 @@
         <div class="field"><label>Buscar</label><input id="fClienteBusca" placeholder="Nombre o teléfono"></div>
       </div>
       <table>
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Estado</th><th>Ruta</th><th>Órdenes</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Estado</th><th>Ruta</th><th>Vendedor</th><th>Órdenes</th><th>Acciones</th></tr></thead>
         <tbody id="clientesTbody"></tbody>
       </table>
       <div class="empty" id="clientesEmpty" style="display:none;">Aún no has cargado clientas.</div>
@@ -1104,6 +1104,11 @@
     }).join("");
     sel.innerHTML = opts;
     if (currentValue) sel.value = currentValue;
+  }
+  function vendedorOptionsHtml(currentValue){
+    return '<option value="">Sin asignar</option>' + vendedores.slice().sort().map(function(v){
+      return '<option value="'+esc(v)+'"'+(v === currentValue ? ' selected' : '')+'>'+esc(v)+'</option>';
+    }).join("");
   }
   function fillVendedorFilters(){
     fillVendedorSelect(document.getElementById("vendedorSelectForm"), "");
@@ -2092,6 +2097,7 @@
         '<td>'+esc(c.ciudad || '—')+'</td>' +
         '<td>'+esc(c.estado || '—')+'</td>' +
         '<td><input class="ruta-inline-edit" style="width:100%;min-width:110px;" list="rutaList" data-ruta-cliente="'+esc(c.id)+'" value="'+esc(c.ruta || '')+'" placeholder="Sin asignar"></td>' +
+        '<td><select class="vendedor-inline-edit" style="width:100%;min-width:110px;" data-vendedor-cliente="'+esc(c.id)+'">'+vendedorOptionsHtml(c.vendedor || '')+'</select></td>' +
         '<td>'+contarOrdenesCliente(c)+'</td>' +
         '<td><div class="btn-row">' +
           '<button class="btn btn-sm" data-edit-cliente="'+esc(c.id)+'">Editar</button>' +
@@ -2104,13 +2110,24 @@
 
   document.getElementById("clientesTbody").addEventListener("change", function(e){
     var rutaInput = e.target.closest("[data-ruta-cliente]");
-    if (!rutaInput) return;
-    var cid = rutaInput.dataset.rutaCliente;
-    var c = clientes.find(function(x){ return x.id === cid; });
-    if (!c) return;
-    c.ruta = rutaInput.value.trim();
-    saveClientes(clientes);
-    fillRutaOptions();
+    if (rutaInput) {
+      var cid = rutaInput.dataset.rutaCliente;
+      var c = clientes.find(function(x){ return x.id === cid; });
+      if (!c) return;
+      c.ruta = rutaInput.value.trim();
+      saveClientes(clientes);
+      fillRutaOptions();
+      return;
+    }
+    var vendedorSel = e.target.closest("[data-vendedor-cliente]");
+    if (vendedorSel) {
+      var cid2 = vendedorSel.dataset.vendedorCliente;
+      var c2 = clientes.find(function(x){ return x.id === cid2; });
+      if (!c2) return;
+      c2.vendedor = vendedorSel.value;
+      saveClientes(clientes);
+      return;
+    }
   });
 
   document.getElementById("clientesTbody").addEventListener("click", function(e){
