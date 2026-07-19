@@ -196,6 +196,8 @@
 
   .route-group { border:1px solid var(--line); border-radius:10px; margin-bottom:14px; overflow:hidden; }
   .route-head { background: var(--bg-soft); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+  .route-body { padding:12px 14px 14px; }
+  .route-body .kv:first-child { margin-top:0; }
   .route-head strong { font-size:13.5px; }
 
   /* ===== PRINT ===== */
@@ -287,7 +289,7 @@
   <nav class="tabs" id="tabs">
     <button data-view="dashboard" class="active">Panel</button>
     <button data-view="ordenes">Órdenes</button>
-    <button data-view="aprobacion">Aprobación</button>
+    <button data-view="aprobacion">Aprobación CS</button>
     <button data-view="rutas">Rutas</button>
     <button data-view="reparto">Reparto</button>
     <button data-view="pendientes">Pendientes</button>
@@ -2135,16 +2137,18 @@
       return '<div class="route-group">' +
         '<div class="route-head"><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
           '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
-        '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
-        '<div class="kv"><b>Contenido</b><span>'+esc(itemsTxt)+(noSurtidos ? ' <strong style="color:#b03a2e;">('+noSurtidos+' sin surtir)</strong>' : '')+'</span></div>' +
-        (o.origenOrdenCode ? '<div class="kv"><b>Origen</b><span>Viene de <a href="#" class="order-link" data-open-order="'+esc(o.origenOrdenId)+'">'+esc(o.origenOrdenCode)+'</a> (faltantes de un pedido anterior)</span></div>' : '') +
-        (o.derivadaOrdenCode ? '<div class="kv"><b>Orden derivada</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
-        (backorders.length ? '<div class="kv"><b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores.</span></div>' : '') +
-        '<div class="kv"><b>Nota</b><span><textarea class="notaCS" data-id="'+esc(o.id)+'" rows="2" style="width:100%;" placeholder="Nota opcional para esta orden…">'+esc(o.notasCS || '')+'</textarea></span></div>' +
-        '<div class="btn-row" style="margin-top:8px;">' +
-          '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
-          (puedeAprobar ? '<button class="btn btn-sm" data-act="nota" data-id="'+o.id+'">Guardar nota</button>' : '') +
-          (puedeAprobar ? '<button class="btn btn-sm btn-pink" data-act="aprobar" data-id="'+o.id+'">Aprobar y pasar a reparto</button>' : '') +
+        '<div class="route-body">' +
+          '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
+          '<div class="kv"><b>Contenido</b><span>'+esc(itemsTxt)+(noSurtidos ? ' <strong style="color:#b03a2e;">('+noSurtidos+' sin surtir)</strong>' : '')+'</span></div>' +
+          (o.origenOrdenCode ? '<div class="kv"><b>Origen</b><span>Viene de <a href="#" class="order-link" data-open-order="'+esc(o.origenOrdenId)+'">'+esc(o.origenOrdenCode)+'</a> (faltantes de un pedido anterior)</span></div>' : '') +
+          (o.derivadaOrdenCode ? '<div class="kv"><b>Orden derivada</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
+          (backorders.length ? '<div class="kv"><b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores.</span></div>' : '') +
+          '<div class="kv" style="margin-top:10px;"><b>Nota</b><span><textarea class="notaCS" data-id="'+esc(o.id)+'" rows="2" style="width:100%;box-sizing:border-box;">'+esc(o.notasCS || '')+'</textarea></span></div>' +
+          '<div class="btn-row" style="margin-top:10px;">' +
+            '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
+            (puedeAprobar ? '<button class="btn btn-sm" data-act="nota" data-id="'+o.id+'">Guardar nota</button>' : '') +
+            (puedeAprobar ? '<button class="btn btn-sm btn-pink" data-act="aprobar" data-id="'+o.id+'">Aprobar y pasar a reparto</button>' : '') +
+          '</div>' +
         '</div>' +
       '</div>';
     }).join("");
@@ -2228,13 +2232,15 @@
     document.getElementById("listosEmpty").style.display = "none";
     cont.innerHTML = list.map(function(o){
       return '<div class="route-group">' +
-        '<label class="chk-item" style="align-items:flex-start;">' +
-          '<input type="checkbox" class="listoSel" data-id="'+esc(o.id)+'"> ' +
-          '<span><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
-            '<div class="muted small">'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+' · '+esc(o.ruta || 'Sin asignar')+'</div>' +
-          '</span>' +
-        '</label>' +
-        '<div class="btn-row" style="margin-top:6px;"><button class="btn btn-sm" data-act="view" data-id="'+esc(o.id)+'">Ver detalle</button></div>' +
+        '<div class="route-body">' +
+          '<label class="chk-item" style="align-items:flex-start;">' +
+            '<input type="checkbox" class="listoSel" data-id="'+esc(o.id)+'"> ' +
+            '<span><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
+              '<div class="muted small">'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+' · '+esc(o.ruta || 'Sin asignar')+'</div>' +
+            '</span>' +
+          '</label>' +
+          '<div class="btn-row" style="margin-top:8px;"><button class="btn btn-sm" data-act="view" data-id="'+esc(o.id)+'">Ver detalle</button></div>' +
+        '</div>' +
       '</div>';
     }).join("");
   }
@@ -2306,12 +2312,14 @@
       return '<div class="route-group">' +
         '<div class="route-head"><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
           '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
+        '<div class="route-body">' +
         '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
         '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
         '<div class="btn-row" style="margin-top:8px;">' +
           '<a class="btn btn-sm" href="'+mapsUrl+'" target="_blank" rel="noopener">Cómo llegar</a>' +
           '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
           '<button class="btn btn-sm btn-pink" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' +
+        '</div>' +
         '</div>' +
       '</div>';
     }).join("");
