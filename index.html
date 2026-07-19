@@ -300,21 +300,10 @@
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
-    <div class="panel" id="panelMigrarDatos" style="background:var(--accent-soft);border:1px dashed var(--accent);">
-      <h2 style="margin-bottom:4px;">Migrar datos de este navegador a la nube</h2>
-      <p class="muted small" style="margin-bottom:10px;">Solo se usa una vez: sube a la nube las órdenes, zonas, vendedores y clientas que ya tenías guardadas en este navegador antes de pasarnos a Firebase. Es seguro correrlo varias veces — no duplica lo que ya está en la nube.</p>
-      <button class="btn btn-primary" id="btnMigrarDatosLocales">Migrar datos locales a la nube</button>
-    </div>
     <div class="panel" id="panelImportarExcel">
       <h2 style="margin-bottom:4px;">Importar órdenes desde Excel</h2>
       <p class="muted small" style="margin-bottom:10px;">Sube un archivo de Excel con varias órdenes de una vez (formato de bloques: clienta + sus productos debajo).</p>
       <button class="btn btn-primary" id="btnAbrirImport">Importar órdenes desde Excel</button>
-    </div>
-    <div class="panel" id="panelReordenarCodigos" style="background:#fff8ec;border:1px dashed #d9a441;">
-      <h2 style="margin-bottom:4px;">Reordenar números de orden</h2>
-      <p class="muted small" style="margin-bottom:10px;">Reasigna los códigos (AORI-2026-0001, 0002...) para que queden consecutivos sin saltos, empezando en 1, según la fecha en que se creó cada orden (la más antigua queda como la 0001). No borra ni cambia ningún otro dato de la orden. <strong>Ojo:</strong> si ya imprimiste etiquetas o guías con el código actual, dejarán de coincidir con el nuevo número.</p>
-      <button class="btn" id="btnReordenarCodigos">Reordenar números de orden</button>
-      <div id="reordenarProgress" class="muted small" style="margin-top:8px;"></div>
     </div>
     <div class="cards" id="dashCards"></div>
     <div class="panel">
@@ -3010,8 +2999,8 @@
       document.getElementById("view-"+destino).classList.add("active");
     }
 
-    // Customer Service y repartidor no pueden crear, importar ni reordenar nada.
-    ["panelMigrarDatos", "panelImportarExcel", "panelReordenarCodigos", "panelNuevaOrden"].forEach(function(id){
+    // Customer Service y repartidor no pueden crear ni importar nada.
+    ["panelImportarExcel", "panelNuevaOrden"].forEach(function(id){
       var el = document.getElementById(id);
       if (el) el.style.display = (esCS || esRep) ? "none" : "";
     });
@@ -3023,126 +3012,7 @@
     if (window.__aoriRenderAll) window.__aoriRenderAll();
   };
 
-  // ---------- Migración de datos guardados localmente antes de pasarnos a la nube ----------
-  // Botón de un solo uso: sube a Firestore lo que este navegador tenía guardado en
-  // localStorage (de cuando el sistema todavía no era multiusuario), sin duplicar
-  // nada si ya se corrió antes o si esas órdenes ya existen en la nube.
-  function migrarDatosLocales(){
-    var legacy = readLocalLegacyData();
-    var totalLocal = legacy.orders.length + legacy.zonas.length + legacy.vendedores.length + legacy.clientes.length;
-    if (!totalLocal) { alert("Este navegador no tiene datos guardados localmente para migrar."); return; }
-    if (!confirm(
-      "Se van a subir a la nube: " + legacy.orders.length + " orden(es), " + legacy.zonas.length + " zona(s), " +
-      legacy.vendedores.length + " vendedor(es) y " + legacy.clientes.length + " clienta(s) guardadas en ESTE navegador.\n\n" +
-      "Si una orden ya existe en la nube (mismo código), no se duplica. ¿Continuar?"
-    )) return;
 
-    var existingCodes = {};
-    orders.forEach(function(o){ existingCodes[o.code] = true; });
-    var ordersToUpload = legacy.orders.filter(function(o){ return !existingCodes[o.code]; });
-
-    var batchPromises = ordersToUpload.map(function(o){ return saveOrder(o); });
-
-    Promise.all(batchPromises).then(function(){
-      var mergedZonas = zonas.slice();
-      legacy.zonas.forEach(function(z){ if (mergedZonas.indexOf(z) === -1) mergedZonas.push(z); });
-      var mergedVendedores = vendedores.slice();
-      legacy.vendedores.forEach(function(v){
-        var yaExiste = mergedVendedores.some(function(x){ return x.nombre === v.nombre; });
-        if (!yaExiste) mergedVendedores.push(v);
-      });
-      var mergedClientes = clientes.slice();
-      legacy.clientes.forEach(function(c){
-        var yaExiste = mergedClientes.some(function(x){ return String(x.telefono||"") === String(c.telefono||""); });
-        if (!yaExiste) mergedClientes.push(c);
-      });
-      return Promise.all([saveZonas(mergedZonas), saveVendedores(mergedVendedores), saveClientes(mergedClientes)]);
-    }).then(function(){
-      alert("Migración completa: " + ordersToUpload.length + " orden(es) nueva(s) subida(s) a la nube (las que ya existían se omitieron).");
-    }).catch(function(err){
-      console.error(err);
-      alert("Hubo un problema durante la migración. Revisa tu conexión e intenta de nuevo.");
-    });
-  }
-  var btnMigrar = document.getElementById("btnMigrarDatosLocales");
-  if (btnMigrar) btnMigrar.addEventListener("click", migrarDatosLocales);
-
-  // ---------- Reordenar números de orden (sin huecos, sin duplicados) ----------
-  // Reasigna o.code de forma consecutiva por año (AORI-2026-0001, 0002, ...) según
-  // createdAt (más antigua = 0001). No toca ningún otro dato de la orden. Al final
-  // actualiza counters/orders_{año} para que genCode() siga después del último número usado.
-  function reordenarCodigosOrden(){
-    if (!orders.length) { alert("No hay órdenes para reordenar."); return; }
-
-    var mensaje = "Esto va a reasignar los códigos de TODAS tus órdenes (" + orders.length + ") para que queden " +
-      "consecutivos desde 0001, según la fecha en que se crearon (la más antigua = 0001).\n\n" +
-      "No se borra ni se cambia ningún otro dato (cliente, productos, estado, fotos, etc.) — solo el código.\n\n" +
-      "Si ya imprimiste etiquetas o guías con el código actual, ya NO van a coincidir con el nuevo número.\n\n" +
-      "¿Quieres continuar?";
-    if (!confirm(mensaje)) return;
-    if (prompt('Para confirmar, escribe REORDENAR (en mayúsculas):') !== "REORDENAR") {
-      alert("No se escribió REORDENAR exactamente — se cancela la operación. No se cambió nada.");
-      return;
-    }
-
-    // Agrupar por año: el año se toma del código actual si tiene el formato esperado,
-    // si no (código raro/viejo), se usa el año de createdAt como respaldo.
-    var porAnio = {};
-    orders.forEach(function(o){
-      var m = /^AORI-(\d{4})-/.exec(o.code || "");
-      var anio = m ? m[1] : String(new Date(o.createdAt || Date.now()).getFullYear());
-      if (!porAnio[anio]) porAnio[anio] = [];
-      porAnio[anio].push(o);
-    });
-
-    var cambios = [];
-    Object.keys(porAnio).forEach(function(anio){
-      var lista = porAnio[anio].slice().sort(function(a, b){
-        var da = a.createdAt || "";
-        var db2 = b.createdAt || "";
-        if (da < db2) return -1;
-        if (da > db2) return 1;
-        return 0;
-      });
-      lista.forEach(function(o, idx){
-        var nuevoCodigo = "AORI-" + anio + "-" + String(idx + 1).padStart(4, "0");
-        if (nuevoCodigo !== o.code) cambios.push({ orden: o, nuevoCodigo: nuevoCodigo });
-      });
-    });
-
-    if (!cambios.length) {
-      alert("Los códigos ya están consecutivos desde 0001 — no hay nada que reordenar.");
-      return;
-    }
-
-    var progressBox = document.getElementById("reordenarProgress");
-    var btn = document.getElementById("btnReordenarCodigos");
-    btn.disabled = true;
-    progressBox.textContent = "Reordenando 0 / " + cambios.length + "...";
-
-    procesarSecuencial(cambios, function(item){
-      item.orden.code = item.nuevoCodigo;
-      return saveOrder(item.orden);
-    }, function(done, total){
-      progressBox.textContent = "Reordenando " + done + " / " + total + "...";
-    }).then(function(){
-      var anios = Object.keys(porAnio);
-      return Promise.all(anios.map(function(anio){
-        return db.collection("counters").doc("orders_" + anio).set({ seq: porAnio[anio].length });
-      }));
-    }).then(function(){
-      progressBox.textContent = "";
-      btn.disabled = false;
-      alert("Listo: se reordenaron " + cambios.length + " código(s) de orden.");
-    }).catch(function(err){
-      console.error(err);
-      progressBox.textContent = "";
-      btn.disabled = false;
-      alert("Hubo un problema reordenando los códigos. Revisa tu conexión e intenta de nuevo — no se perdió información, pero es posible que algunos códigos hayan quedado a medio actualizar.");
-    });
-  }
-  var btnReordenar = document.getElementById("btnReordenarCodigos");
-  if (btnReordenar) btnReordenar.addEventListener("click", reordenarCodigosOrden);
 
   // ---------- Importar órdenes desde Excel ----------
   // Formato esperado (como las hojas "ENVIOS ..." de Karen): cada clienta ocupa un
