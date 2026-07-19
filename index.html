@@ -80,6 +80,9 @@
   .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
   .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; }
   .btn-danger { color: var(--danger); }
+  .btn-pink { background:#e0558f; border-color:#e0558f; color:#fff; }
+  .btn-pink:hover { background:#c43f77; border-color:#c43f77; }
+  .btn-pink:disabled { background:#f0b8d0; border-color:#f0b8d0; color:#fff; cursor:not-allowed; }
   .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
 
   table { width:100%; border-collapse: collapse; font-size:13px; }
@@ -292,17 +295,17 @@
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
-    <div class="panel" style="background:var(--accent-soft);border:1px dashed var(--accent);">
+    <div class="panel" id="panelMigrarDatos" style="background:var(--accent-soft);border:1px dashed var(--accent);">
       <h2 style="margin-bottom:4px;">Migrar datos de este navegador a la nube</h2>
       <p class="muted small" style="margin-bottom:10px;">Solo se usa una vez: sube a la nube las órdenes, zonas, vendedores y clientas que ya tenías guardadas en este navegador antes de pasarnos a Firebase. Es seguro correrlo varias veces — no duplica lo que ya está en la nube.</p>
       <button class="btn btn-primary" id="btnMigrarDatosLocales">Migrar datos locales a la nube</button>
     </div>
-    <div class="panel">
+    <div class="panel" id="panelImportarExcel">
       <h2 style="margin-bottom:4px;">Importar órdenes desde Excel</h2>
       <p class="muted small" style="margin-bottom:10px;">Sube un archivo de Excel con varias órdenes de una vez (formato de bloques: clienta + sus productos debajo).</p>
       <button class="btn btn-primary" id="btnAbrirImport">Importar órdenes desde Excel</button>
     </div>
-    <div class="panel" style="background:#fff8ec;border:1px dashed #d9a441;">
+    <div class="panel" id="panelReordenarCodigos" style="background:#fff8ec;border:1px dashed #d9a441;">
       <h2 style="margin-bottom:4px;">Reordenar números de orden</h2>
       <p class="muted small" style="margin-bottom:10px;">Reasigna los códigos (AORI-2026-0001, 0002...) para que queden consecutivos sin saltos, empezando en 1, según la fecha en que se creó cada orden (la más antigua queda como la 0001). No borra ni cambia ningún otro dato de la orden. <strong>Ojo:</strong> si ya imprimiste etiquetas o guías con el código actual, dejarán de coincidir con el nuevo número.</p>
       <button class="btn" id="btnReordenarCodigos">Reordenar números de orden</button>
@@ -318,7 +321,7 @@
 
   <!-- ORDENES -->
   <div class="view" id="view-ordenes">
-    <div class="panel">
+    <div class="panel" id="panelNuevaOrden">
       <h2>Registrar nueva orden de compra</h2>
       <form id="orderForm">
         <div class="row">
@@ -464,8 +467,10 @@
       <p class="muted small">Órdenes en estado "Pendiente" — incluye tanto pedidos nuevos sin aprobar como los generados automáticamente por productos que faltaron al empacar. Útil para saber qué cubrir cuando llegue inventario nuevo.</p>
       <div class="filters" style="align-items:flex-end;">
         <div class="field"><label>Filtrar por clienta</label><select id="pendClienteFiltro"><option value="">Todas las clientas</option></select></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding-bottom:8px;"><input type="checkbox" id="pendSoloDerivados"> Solo pedidos derivados de faltantes</label>
         <button class="btn btn-primary" id="btnPrintPendientes">Imprimir reporte</button>
       </div>
+      <div id="pendDerivadosAviso"></div>
       <div id="pendResumenBox"></div>
       <div id="pendDetalleBox"></div>
       <div class="empty" id="pendEmpty" style="display:none;">No hay productos pendientes por surtir en este momento.</div>
@@ -857,6 +862,15 @@
   function estadoLabel(e){
     return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
   }
+
+  // ---------- Roles y permisos ----------
+  // "admin" (o sin rol asignado): acceso completo. "limitado": no ve la pestaña Vendedores.
+  // "customer_service": no ve Vendedores, ve todo el detalle de las órdenes, pero solo puede
+  // aprobar el paso Empacado → En ruta — no puede crear, editar, borrar ni retroceder nada.
+  // Esto solo ajusta qué se muestra; la restricción real vive en las reglas de Firestore.
+  function currentRole(){ return window.__aoriRole || ""; }
+  function esCustomerService(){ return currentRole() === "customer_service"; }
+  function puedeAprobarRuta(){ var r = currentRole(); return r === "admin" || r === "customer_service"; }
   // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a empacarse.
   var ESTADO_STEPS = [
     { key: "pendiente", label: "Pendiente" },
@@ -1224,13 +1238,24 @@
   function renderOrdersTable(){
     var tbody = document.getElementById("ordersTbody");
     var list = filteredOrders();
+    var isCS = esCustomerService();
     tbody.innerHTML = list.map(function(o){
       var tipo = o.tipoEntrega || "envio";
+      var advanceBtn = "";
+      if (o.estado !== 'entregado') {
+        if (o.estado === 'empacado') {
+          advanceBtn = puedeAprobarRuta()
+            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Aprobar y enviar a ruta</button>'
+            : '<span class="badge" style="background:#fdf0d5;color:#8a6440;white-space:normal;">Esperando aprobación de Customer Service</span>';
+        } else if (!isCS) {
+          advanceBtn = '<button class="btn btn-sm" data-act="advance" data-id="'+o.id+'">'+esc(nextActionLabel(o.estado))+'</button>';
+        }
+      }
       return '<tr>' +
         '<td><input type="checkbox" class="rowSel" data-id="'+o.id+'"></td>' +
         '<td><strong>'+esc(o.code)+'</strong><div class="muted small">'+fmtDate(o.createdAt)+'</div></td>' +
         '<td>'+esc(o.cliente)+'<div class="muted small">'+esc(o.telefono)+'</div></td>' +
-        '<td><select class="tipoSelect" data-id="'+o.id+'">' +
+        '<td><select class="tipoSelect" data-id="'+o.id+'"'+(isCS ? ' disabled' : '')+'>' +
           '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío</option>' +
           '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Foráneo</option>' +
           '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Pickup</option>' +
@@ -1241,12 +1266,12 @@
         '<td>'+
           '<div class="btn-row">'+
             '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver</button>'+
-            '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>'+
+            (isCS ? '' : '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>')+
             '<button class="btn btn-sm" data-act="label" data-id="'+o.id+'">Vista previa etiqueta</button>'+
-            (o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
-            (o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="advance" data-id="'+o.id+'">'+esc(nextActionLabel(o.estado))+'</button>' : '')+
-            (o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
-            '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>'+
+            (!isCS && o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
+            advanceBtn +
+            (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
+            (isCS ? '' : '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>')+
           '</div>'+
         '</td>'+
       '</tr>';
@@ -1300,16 +1325,43 @@
     renderAll();
   }
 
+  // Pedidos pendientes de la misma clienta que nacieron de un faltante anterior
+  // (o.origenOrdenId), para avisar en el detalle de sus otras órdenes.
+  function backordersDeCliente(o){
+    if (!o.clienteId) return [];
+    return orders.filter(function(x){
+      return x.clienteId === o.clienteId && x.origenOrdenId && x.estado === "pendiente" && x.id !== o.id;
+    });
+  }
+
   function showOrderModal(o){
     var tipo = o.tipoEntrega || "envio";
     var hist = (o.tipoHistorial || []).slice().reverse();
+    var isCS = esCustomerService();
+    var backorders = backordersDeCliente(o);
+    var accionesHtml;
+    if (o.estado === 'empacado') {
+      accionesHtml = puedeAprobarRuta()
+        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Aprobar y enviar a ruta</button>'
+        : '<span class="badge" style="background:#fdf0d5;color:#8a6440;">Esperando aprobación de Customer Service</span>';
+    } else if (!isCS && o.estado !== 'entregado') {
+      accionesHtml = '<button class="btn btn-primary btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">'+esc(nextActionLabel(o.estado))+'</button>';
+    } else {
+      accionesHtml = '';
+    }
     document.getElementById("ovOrderTitle").textContent = o.code + " — " + o.cliente;
     document.getElementById("ovOrderBody").innerHTML =
       buildEstadoStepper(o.estado) +
+      (backorders.length ? (
+        '<div class="kv" style="background:#fff4f4;border:1px solid #e0a0a0;border-radius:8px;padding:10px;margin-bottom:12px;">' +
+          '<b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores: ' +
+          backorders.map(function(b){ return '<a href="#" class="order-link" data-open-order="'+esc(b.id)+'">'+esc(b.code)+'</a>'; }).join(', ') +
+        '</span></div>'
+      ) : '') +
       '<div class="btn-row" style="margin-bottom:16px;">' +
-        (o.estado !== 'entregado' ? '<button class="btn btn-primary btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">'+esc(nextActionLabel(o.estado))+'</button>' : '') +
-        (o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
-        (o.estado !== 'entregado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
+        accionesHtml +
+        (!isCS && o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
+        (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
       '</div>' +
       '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
       '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
@@ -1319,7 +1371,7 @@
       '<div class="kv"><b>Vendedor</b><span>'+esc(o.vendedor || 'Sin asignar')+'</span></div>' +
       '<div class="kv"><b>Valor venta</b><span>'+fmtMoney(o.valorVenta)+'</span></div>' +
       '<div class="kv"><b>Tipo de entrega</b><span>' +
-        '<select id="modalTipoSelect" class="tipoSelect">' +
+        '<select id="modalTipoSelect" class="tipoSelect"'+(isCS ? ' disabled' : '')+'>' +
           '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío local a domicilio</option>' +
           '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Envío foráneo (transportadora)</option>' +
           '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Recoge en tienda (Pickup)</option>' +
@@ -1331,15 +1383,19 @@
       (tipo === 'foraneo' ? (
         '<div style="margin-top:14px;font-weight:700;font-size:13px;">Datos de la guía (envío foráneo)</div>' +
         '<div class="row">' +
-          '<div class="field"><label>Transportadora</label><input id="modalTransportadora" value="'+esc((o.guia && o.guia.transportadora) || '')+'"></div>' +
-          '<div class="field"><label>Número de guía</label><input id="modalNumeroGuia" value="'+esc((o.guia && o.guia.numero) || '')+'"></div>' +
-          '<div class="field"><label>Costo de guía ($)</label><input id="modalCostoGuia" type="number" min="0" step="any" value="'+((o.guia && o.guia.costo) || 0)+'"></div>' +
+          '<div class="field"><label>Transportadora</label><input id="modalTransportadora" value="'+esc((o.guia && o.guia.transportadora) || '')+'"'+(isCS ? ' disabled' : '')+'></div>' +
+          '<div class="field"><label>Número de guía</label><input id="modalNumeroGuia" value="'+esc((o.guia && o.guia.numero) || '')+'"'+(isCS ? ' disabled' : '')+'></div>' +
+          '<div class="field"><label>Costo de guía ($)</label><input id="modalCostoGuia" type="number" min="0" step="any" value="'+((o.guia && o.guia.costo) || 0)+'"'+(isCS ? ' disabled' : '')+'></div>' +
         '</div>' +
-        '<div class="field"><label>Foto de la guía / recibo</label>' +
-          '<input type="file" accept="image/*" capture="environment" id="modalGuiaFotoInput">' +
-          '<img id="modalGuiaFotoPreview" class="thumb" src="'+((o.guia && o.guia.fotoDataUrl) || '')+'" style="'+((o.guia && o.guia.fotoDataUrl) ? '' : 'display:none;')+'">' +
-        '</div>' +
-        '<div class="btn-row"><button type="button" class="btn btn-sm" id="btnGuardarGuia">Guardar guía</button></div>'
+        (isCS ? (
+          (o.guia && o.guia.fotoDataUrl) ? '<div class="field"><label>Foto de la guía / recibo</label><img class="thumb" src="'+esc(o.guia.fotoDataUrl)+'"></div>' : ''
+        ) : (
+          '<div class="field"><label>Foto de la guía / recibo</label>' +
+            '<input type="file" accept="image/*" capture="environment" id="modalGuiaFotoInput">' +
+            '<img id="modalGuiaFotoPreview" class="thumb" src="'+((o.guia && o.guia.fotoDataUrl) || '')+'" style="'+((o.guia && o.guia.fotoDataUrl) ? '' : 'display:none;')+'">' +
+          '</div>' +
+          '<div class="btn-row"><button type="button" class="btn btn-sm" id="btnGuardarGuia">Guardar guía</button></div>'
+        ))
       ) : '') +
       (o.origenOrdenCode ? '<div class="kv"><b>Origen</b><span>Viene de <a href="#" class="order-link" data-open-order="'+esc(o.origenOrdenId)+'">'+esc(o.origenOrdenCode)+'</a> (productos que faltaron por surtir)</span></div>' : '') +
       buildContenidoSection(o) +
@@ -1348,7 +1404,7 @@
       '<div class="kv"><b>Creada</b><span>'+fmtDate(o.createdAt)+'</span></div>' +
       (o.entrega ? '<div class="kv"><b>Entregada</b><span>'+fmtDate(o.entrega.fecha)+' — recibió: '+esc(o.entrega.receptor)+'</span></div>' : '') +
       '<div class="btn-row" style="margin-top:14px;">' +
-        '<button class="btn btn-primary" onclick="window.__aoriEditOne(\''+o.id+'\')">Editar orden</button>' +
+        (isCS ? '' : '<button class="btn btn-primary" onclick="window.__aoriEditOne(\''+o.id+'\')">Editar orden</button>') +
         '<button class="btn" onclick="window.__aoriPrintOne(\''+o.id+'\')">Vista previa etiqueta</button>' +
       '</div>';
     var modalSel = document.getElementById("modalTipoSelect");
@@ -1418,7 +1474,7 @@
   // Sección "Contenido" del detalle de orden: checklist marcable en "empacado", lectura simple en las demás etapas.
   function buildContenidoSection(o){
     ensureOrderItems(o);
-    var editable = (o.estado === "empacado");
+    var editable = (o.estado === "empacado") && !esCustomerService();
     if (!o.items.length) {
       return '<div class="kv"><b>Contenido</b><span class="muted">Sin productos.</span></div>';
     }
@@ -1432,7 +1488,7 @@
     var html = '<div class="kv"><b>Contenido</b><div class="checklist-box">'+rows+'</div></div>';
     if (editable) {
       html += '<div class="btn-row" style="margin:6px 0 0 120px;">' +
-        '<button type="button" class="btn btn-sm" id="btnGenerarPendiente"'+(pendCount ? '' : ' disabled')+'>Generar orden con lo no surtido'+(pendCount ? ' ('+pendCount+')' : '')+'</button>' +
+        '<button type="button" class="btn btn-sm btn-pink" id="btnGenerarPendiente"'+(pendCount ? '' : ' disabled')+'>Generar orden con lo no surtido'+(pendCount ? ' ('+pendCount+')' : '')+'</button>' +
       '</div>';
     }
     return html;
@@ -2351,8 +2407,10 @@
 
   function getPendientesFiltrados(){
     var clienteId = document.getElementById("pendClienteFiltro").value;
+    var soloDerivados = document.getElementById("pendSoloDerivados").checked;
     var list = getPendienteOrders();
     if (clienteId) list = list.filter(function(o){ return o.clienteId === clienteId; });
+    if (soloDerivados) list = list.filter(function(o){ return !!o.origenOrdenId; });
     return list;
   }
 
@@ -2376,8 +2434,23 @@
     return counts;
   }
 
+  // Aviso siempre visible (independiente de los filtros) de clientas con pedidos
+  // pendientes que nacieron de un faltante anterior (origenOrdenId), para que Customer
+  // Service y empaque tengan visibilidad de esto sin tener que buscarlo.
+  function renderDerivadosAviso(){
+    var box = document.getElementById("pendDerivadosAviso");
+    var derivados = getPendienteOrders().filter(function(o){ return !!o.origenOrdenId; });
+    if (!derivados.length) { box.innerHTML = ""; return; }
+    var porCliente = agruparPendientesPorCliente(derivados);
+    var nClientas = Object.keys(porCliente).length;
+    box.innerHTML = '<div class="kv" style="background:#fff4f4;border:1px solid #e0a0a0;border-radius:8px;padding:10px;margin:10px 0;">' +
+      '<b>⚠ Pedidos derivados de faltantes</b><span>'+nClientas+' clienta(s) con '+derivados.length+' pedido(s) pendiente(s) que salieron de un faltante anterior. Marca "Solo pedidos derivados de faltantes" arriba para verlos.</span>' +
+    '</div>';
+  }
+
   function renderPendientes(){
     fillPendClienteFiltro();
+    renderDerivadosAviso();
     var list = getPendientesFiltrados();
     var resumenBox = document.getElementById("pendResumenBox");
     var detalleBox = document.getElementById("pendDetalleBox");
@@ -2414,6 +2487,7 @@
       }).join("");
   }
   document.getElementById("pendClienteFiltro").addEventListener("change", renderPendientes);
+  document.getElementById("pendSoloDerivados").addEventListener("change", renderPendientes);
   document.getElementById("btnPrintPendientes").addEventListener("click", printPendientesReport);
 
   function printPendientesReport(){
@@ -2421,6 +2495,7 @@
     if (!list.length) { alert("No hay productos pendientes con el filtro actual."); return; }
     var clienteSel = document.getElementById("pendClienteFiltro");
     var clienteNombre = clienteSel.value ? clienteSel.options[clienteSel.selectedIndex].text : "Todas las clientas";
+    if (document.getElementById("pendSoloDerivados").checked) clienteNombre += " · solo derivados de faltantes";
 
     var counts = contarProductosPendientes(list);
     var countKeys = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; });
@@ -2469,6 +2544,9 @@
     renderPendientes();
     renderEntregas();
   }
+  // Se expone para que el bloque de login pueda refrescar la interfaz apenas se
+  // conoce el rol del usuario (la sincronización puede arrancar antes de eso).
+  window.__aoriRenderAll = renderAll;
 
   // ---------- Sincronización en tiempo real con Firestore ----------
   // Se activa una sola vez, justo después de iniciar sesión (ver auth.onAuthStateChanged
@@ -2543,21 +2621,33 @@
   };
 
   // ---------- Roles de acceso ----------
-  // Por defecto cualquier cuenta tiene acceso completo ("admin"). Solo las cuentas que
-  // Karen marque manualmente con role:"limitado" (en Firestore, colección "users",
-  // documento = su UID) pierden la pestaña de Vendedores. La restricción real la hacen
-  // las reglas de seguridad; esto de aquí solo oculta el botón para que no confunda.
+  // Por defecto cualquier cuenta tiene acceso completo ("admin"). Las cuentas que Karen
+  // marque manualmente con role:"limitado" o role:"customer_service" (en Firestore,
+  // colección "users", documento = su UID) pierden la pestaña de Vendedores. Las cuentas
+  // "customer_service" además solo pueden aprobar el paso Empacado → En ruta (ver
+  // renderOrdersTable / showOrderModal). La restricción real la hacen las reglas de
+  // seguridad; esto de aquí solo ajusta lo que se muestra para que no confunda.
   window.__aoriApplyRole = function(){
     var role = window.__aoriRole || "admin";
+    var sinVendedores = (role === "limitado" || role === "customer_service");
+    var esCS = (role === "customer_service");
     var tabBtn = document.querySelector('button[data-view="vendedores"]');
-    if (!tabBtn) return;
-    tabBtn.style.display = (role === "limitado") ? "none" : "";
-    if (role === "limitado" && document.getElementById("view-vendedores").classList.contains("active")) {
-      tabBtn.classList.remove("active");
-      document.getElementById("view-vendedores").classList.remove("active");
-      document.querySelector('button[data-view="dashboard"]').classList.add("active");
-      document.getElementById("view-dashboard").classList.add("active");
+    if (tabBtn) {
+      tabBtn.style.display = sinVendedores ? "none" : "";
+      if (sinVendedores && document.getElementById("view-vendedores").classList.contains("active")) {
+        tabBtn.classList.remove("active");
+        document.getElementById("view-vendedores").classList.remove("active");
+        document.querySelector('button[data-view="dashboard"]').classList.add("active");
+        document.getElementById("view-dashboard").classList.add("active");
+      }
     }
+    // Customer Service no puede crear, importar ni reordenar nada — solo ver y aprobar
+    // el paso Empacado → En ruta (ver renderOrdersTable / showOrderModal).
+    ["panelMigrarDatos", "panelImportarExcel", "panelReordenarCodigos", "panelNuevaOrden"].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.style.display = esCS ? "none" : "";
+    });
+    if (window.__aoriRenderAll) window.__aoriRenderAll();
   };
 
   // ---------- Migración de datos guardados localmente antes de pasarnos a la nube ----------
