@@ -2998,7 +2998,9 @@
 
     // El repartidor solo necesita Reparto (su vista de trabajo) y Entregas — no le hace
     // falta Órdenes (vista de oficina), Dashboard, Pendientes, ni Clientas.
-    ["dashboard", "ordenes", "pendientes", "clientes"].forEach(function(view){
+    // "Rutas" es la vista de reportes/zonas (solo filtra, no tiene casillas para
+    // seleccionar pedidos) — no es la pestaña de trabajo del repartidor, esa es "Reparto".
+    ["dashboard", "ordenes", "pendientes", "clientes", "rutas"].forEach(function(view){
       var btn = document.querySelector('button[data-view="'+view+'"]');
       if (btn) btn.style.display = esRep ? "none" : "";
     });
