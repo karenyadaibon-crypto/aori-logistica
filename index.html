@@ -867,10 +867,16 @@
   // "admin" (o sin rol asignado): acceso completo. "limitado": no ve la pestaña Vendedores.
   // "customer_service": no ve Vendedores, ve todo el detalle de las órdenes, pero solo puede
   // aprobar el paso Empacado → En ruta — no puede crear, editar, borrar ni retroceder nada.
+  // "repartidor": solo ve las órdenes "En ruta" (ya aprobadas) y su historial de Entregas;
+  // su única acción es marcar entregado (foto + quién recibió) — nada de crear/editar/borrar.
   // Esto solo ajusta qué se muestra; la restricción real vive en las reglas de Firestore.
   function currentRole(){ return window.__aoriRole || ""; }
   function esCustomerService(){ return currentRole() === "customer_service"; }
+  function esRepartidor(){ return currentRole() === "repartidor"; }
   function puedeAprobarRuta(){ var r = currentRole(); return r === "admin" || r === "customer_service"; }
+  // Puede crear/editar/borrar/retroceder órdenes libremente (admin y limitado). CS y
+  // repartidor solo tienen su acción puntual (aprobar ruta / marcar entregado).
+  function puedeEditarOrden(){ return !esCustomerService() && !esRepartidor(); }
   // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a empacarse.
   var ESTADO_STEPS = [
     { key: "pendiente", label: "Pendiente" },
@@ -1219,7 +1225,9 @@
     var fd = document.getElementById("fFechaDesde").value; // "YYYY-MM-DD" o ""
     var fh = document.getElementById("fFechaHasta").value;
     var fb = document.getElementById("fBusca").value.toLowerCase().trim();
+    var soloRepartidor = esRepartidor();
     return orders.filter(function(o){
+      if (soloRepartidor && o.estado !== "en_ruta") return false;
       if (fe && o.estado !== fe) return false;
       if (ft && (o.tipoEntrega || "envio") !== ft) return false;
       if (fr && o.ruta !== fr) return false;
@@ -1239,6 +1247,7 @@
     var tbody = document.getElementById("ordersTbody");
     var list = filteredOrders();
     var isCS = esCustomerService();
+    var canEdit = puedeEditarOrden();
     tbody.innerHTML = list.map(function(o){
       var tipo = o.tipoEntrega || "envio";
       var advanceBtn = "";
@@ -1255,7 +1264,7 @@
         '<td><input type="checkbox" class="rowSel" data-id="'+o.id+'"></td>' +
         '<td><strong>'+esc(o.code)+'</strong><div class="muted small">'+fmtDate(o.createdAt)+'</div></td>' +
         '<td>'+esc(o.cliente)+'<div class="muted small">'+esc(o.telefono)+'</div></td>' +
-        '<td><select class="tipoSelect" data-id="'+o.id+'"'+(isCS ? ' disabled' : '')+'>' +
+        '<td><select class="tipoSelect" data-id="'+o.id+'"'+(canEdit ? '' : ' disabled')+'>' +
           '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío</option>' +
           '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Foráneo</option>' +
           '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Pickup</option>' +
@@ -1266,12 +1275,12 @@
         '<td>'+
           '<div class="btn-row">'+
             '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver</button>'+
-            (isCS ? '' : '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>')+
+            (canEdit ? '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>' : '')+
             '<button class="btn btn-sm" data-act="label" data-id="'+o.id+'">Vista previa etiqueta</button>'+
-            (!isCS && o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
+            (canEdit && o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
             advanceBtn +
             (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
-            (isCS ? '' : '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>')+
+            (canEdit ? '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>' : '')+
           '</div>'+
         '</td>'+
       '</tr>';
@@ -1338,6 +1347,7 @@
     var tipo = o.tipoEntrega || "envio";
     var hist = (o.tipoHistorial || []).slice().reverse();
     var isCS = esCustomerService();
+    var canEdit = puedeEditarOrden();
     var backorders = backordersDeCliente(o);
     var accionesHtml;
     if (o.estado === 'empacado') {
@@ -1360,7 +1370,7 @@
       ) : '') +
       '<div class="btn-row" style="margin-bottom:16px;">' +
         accionesHtml +
-        (!isCS && o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
+        (canEdit && o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
         (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
       '</div>' +
       '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
@@ -1371,7 +1381,7 @@
       '<div class="kv"><b>Vendedor</b><span>'+esc(o.vendedor || 'Sin asignar')+'</span></div>' +
       '<div class="kv"><b>Valor venta</b><span>'+fmtMoney(o.valorVenta)+'</span></div>' +
       '<div class="kv"><b>Tipo de entrega</b><span>' +
-        '<select id="modalTipoSelect" class="tipoSelect"'+(isCS ? ' disabled' : '')+'>' +
+        '<select id="modalTipoSelect" class="tipoSelect"'+(canEdit ? '' : ' disabled')+'>' +
           '<option value="envio"'+(tipo==='envio'?' selected':'')+'>Envío local a domicilio</option>' +
           '<option value="foraneo"'+(tipo==='foraneo'?' selected':'')+'>Envío foráneo (transportadora)</option>' +
           '<option value="pickup"'+(tipo==='pickup'?' selected':'')+'>Recoge en tienda (Pickup)</option>' +
@@ -1383,11 +1393,11 @@
       (tipo === 'foraneo' ? (
         '<div style="margin-top:14px;font-weight:700;font-size:13px;">Datos de la guía (envío foráneo)</div>' +
         '<div class="row">' +
-          '<div class="field"><label>Transportadora</label><input id="modalTransportadora" value="'+esc((o.guia && o.guia.transportadora) || '')+'"'+(isCS ? ' disabled' : '')+'></div>' +
-          '<div class="field"><label>Número de guía</label><input id="modalNumeroGuia" value="'+esc((o.guia && o.guia.numero) || '')+'"'+(isCS ? ' disabled' : '')+'></div>' +
-          '<div class="field"><label>Costo de guía ($)</label><input id="modalCostoGuia" type="number" min="0" step="any" value="'+((o.guia && o.guia.costo) || 0)+'"'+(isCS ? ' disabled' : '')+'></div>' +
+          '<div class="field"><label>Transportadora</label><input id="modalTransportadora" value="'+esc((o.guia && o.guia.transportadora) || '')+'"'+(canEdit ? '' : ' disabled')+'></div>' +
+          '<div class="field"><label>Número de guía</label><input id="modalNumeroGuia" value="'+esc((o.guia && o.guia.numero) || '')+'"'+(canEdit ? '' : ' disabled')+'></div>' +
+          '<div class="field"><label>Costo de guía ($)</label><input id="modalCostoGuia" type="number" min="0" step="any" value="'+((o.guia && o.guia.costo) || 0)+'"'+(canEdit ? '' : ' disabled')+'></div>' +
         '</div>' +
-        (isCS ? (
+        (!canEdit ? (
           (o.guia && o.guia.fotoDataUrl) ? '<div class="field"><label>Foto de la guía / recibo</label><img class="thumb" src="'+esc(o.guia.fotoDataUrl)+'"></div>' : ''
         ) : (
           '<div class="field"><label>Foto de la guía / recibo</label>' +
@@ -1404,7 +1414,7 @@
       '<div class="kv"><b>Creada</b><span>'+fmtDate(o.createdAt)+'</span></div>' +
       (o.entrega ? '<div class="kv"><b>Entregada</b><span>'+fmtDate(o.entrega.fecha)+' — recibió: '+esc(o.entrega.receptor)+'</span></div>' : '') +
       '<div class="btn-row" style="margin-top:14px;">' +
-        (isCS ? '' : '<button class="btn btn-primary" onclick="window.__aoriEditOne(\''+o.id+'\')">Editar orden</button>') +
+        (canEdit ? '<button class="btn btn-primary" onclick="window.__aoriEditOne(\''+o.id+'\')">Editar orden</button>' : '') +
         '<button class="btn" onclick="window.__aoriPrintOne(\''+o.id+'\')">Vista previa etiqueta</button>' +
       '</div>';
     var modalSel = document.getElementById("modalTipoSelect");
@@ -1474,7 +1484,7 @@
   // Sección "Contenido" del detalle de orden: checklist marcable en "empacado", lectura simple en las demás etapas.
   function buildContenidoSection(o){
     ensureOrderItems(o);
-    var editable = (o.estado === "empacado") && !esCustomerService();
+    var editable = (o.estado === "empacado") && puedeEditarOrden();
     if (!o.items.length) {
       return '<div class="kv"><b>Contenido</b><span class="muted">Sin productos.</span></div>';
     }
@@ -1897,7 +1907,9 @@
   function getRutasVisibleOrders(){
     var soloAprobadas = document.getElementById("rutasSoloAprobadas").checked;
     var zonaFiltro = document.getElementById("rutasZonaFiltro").value;
+    var soloRepartidor = esRepartidor();
     return orders.filter(function(o){
+      if (soloRepartidor) return o.estado === "en_ruta" && (!zonaFiltro || getGroupKey(o) === zonaFiltro);
       if (soloAprobadas && o.estado === "pendiente") return false;
       if (zonaFiltro && getGroupKey(o) !== zonaFiltro) return false;
       return true;
@@ -2622,31 +2634,46 @@
 
   // ---------- Roles de acceso ----------
   // Por defecto cualquier cuenta tiene acceso completo ("admin"). Las cuentas que Karen
-  // marque manualmente con role:"limitado" o role:"customer_service" (en Firestore,
-  // colección "users", documento = su UID) pierden la pestaña de Vendedores. Las cuentas
-  // "customer_service" además solo pueden aprobar el paso Empacado → En ruta (ver
-  // renderOrdersTable / showOrderModal). La restricción real la hacen las reglas de
-  // seguridad; esto de aquí solo ajusta lo que se muestra para que no confunda.
+  // marque manualmente con role:"limitado", "customer_service" o "repartidor" (en Firestore,
+  // colección "users", documento = su UID) pierden la pestaña de Vendedores. "customer_service"
+  // solo puede aprobar el paso Empacado → En ruta; "repartidor" solo ve las órdenes "En ruta"
+  // y su única acción es marcar entregado (ver renderOrdersTable / showOrderModal / filteredOrders).
+  // La restricción real la hacen las reglas de seguridad; esto de aquí solo ajusta lo que se
+  // muestra para que no confunda.
   window.__aoriApplyRole = function(){
     var role = window.__aoriRole || "admin";
-    var sinVendedores = (role === "limitado" || role === "customer_service");
+    var sinVendedores = (role === "limitado" || role === "customer_service" || role === "repartidor");
     var esCS = (role === "customer_service");
+    var esRep = (role === "repartidor");
     var tabBtn = document.querySelector('button[data-view="vendedores"]');
-    if (tabBtn) {
-      tabBtn.style.display = sinVendedores ? "none" : "";
-      if (sinVendedores && document.getElementById("view-vendedores").classList.contains("active")) {
-        tabBtn.classList.remove("active");
-        document.getElementById("view-vendedores").classList.remove("active");
-        document.querySelector('button[data-view="dashboard"]').classList.add("active");
-        document.getElementById("view-dashboard").classList.add("active");
-      }
+    if (tabBtn) tabBtn.style.display = sinVendedores ? "none" : "";
+
+    // El repartidor solo necesita Órdenes (ya filtradas a "En ruta"), Rutas y Entregas.
+    ["dashboard", "pendientes", "clientes"].forEach(function(view){
+      var btn = document.querySelector('button[data-view="'+view+'"]');
+      if (btn) btn.style.display = esRep ? "none" : "";
+    });
+
+    // Si la pestaña que quedó activa se ocultó para este rol, manda a una segura.
+    var activeBtn = document.querySelector('nav.tabs button.active');
+    if (activeBtn && activeBtn.style.display === "none") {
+      var destino = esRep ? "ordenes" : "dashboard";
+      document.querySelectorAll('nav.tabs button').forEach(function(b){ b.classList.remove("active"); });
+      document.querySelectorAll('.view').forEach(function(v){ v.classList.remove("active"); });
+      document.querySelector('button[data-view="'+destino+'"]').classList.add("active");
+      document.getElementById("view-"+destino).classList.add("active");
     }
-    // Customer Service no puede crear, importar ni reordenar nada — solo ver y aprobar
-    // el paso Empacado → En ruta (ver renderOrdersTable / showOrderModal).
+
+    // Customer Service y repartidor no pueden crear, importar ni reordenar nada.
     ["panelMigrarDatos", "panelImportarExcel", "panelReordenarCodigos", "panelNuevaOrden"].forEach(function(id){
       var el = document.getElementById(id);
-      if (el) el.style.display = esCS ? "none" : "";
+      if (el) el.style.display = (esCS || esRep) ? "none" : "";
     });
+
+    // Para el repartidor, el filtro de Estado en Órdenes no aplica (siempre ve solo "En ruta").
+    var fEstadoField = document.getElementById("fEstado");
+    if (fEstadoField && fEstadoField.parentElement) fEstadoField.parentElement.style.display = esRep ? "none" : "";
+
     if (window.__aoriRenderAll) window.__aoriRenderAll();
   };
 
