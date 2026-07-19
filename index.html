@@ -287,6 +287,7 @@
     <button data-view="dashboard" class="active">Panel</button>
     <button data-view="ordenes">Órdenes</button>
     <button data-view="rutas">Rutas</button>
+    <button data-view="reparto">Reparto</button>
     <button data-view="pendientes">Pendientes</button>
     <button data-view="entregas">Entregas</button>
     <button data-view="vendedores">Vendedores</button>
@@ -457,6 +458,20 @@
       </div>
       <div id="rutasContainer"></div>
       <div class="empty" id="rutasEmpty" style="display:none;">No hay órdenes que coincidan con los filtros seleccionados.</div>
+    </div>
+  </div>
+
+  <!-- REPARTO -->
+  <div class="view" id="view-reparto">
+    <div class="panel">
+      <h2>Reparto de hoy</h2>
+      <p class="muted small">Solo los pedidos ya aprobados y en camino ("En ruta"). Elige una zona y da clic en "Generar ruta" para abrir Google Maps con todas las direcciones cargadas — dentro de Maps puedes usar la opción de reordenar/optimizar paradas antes de arrancar.</p>
+      <div class="filters" style="align-items:center;">
+        <select id="repartoZonaFiltro"><option value="">Todas las zonas</option></select>
+        <button class="btn btn-primary" id="btnGenerarRutaMaps">Generar ruta en Google Maps</button>
+      </div>
+      <div id="repartoContainer"></div>
+      <div class="empty" id="repartoEmpty" style="display:none;">No tienes pedidos "En ruta" en este momento.</div>
     </div>
   </div>
 
@@ -2013,6 +2028,81 @@
     setTimeout(function(){ window.print(); }, 50);
   }
 
+  // ---------- Reparto (vista simple para repartidores) ----------
+  // Siempre solo "En ruta" — ya aprobadas por Customer Service — sin importar el rol
+  // de quien la esté viendo. Es la vista de trabajo del día para quien reparte.
+  function getRepartoOrders(){
+    var zonaFiltro = document.getElementById("repartoZonaFiltro").value;
+    return orders.filter(function(o){
+      if (o.estado !== "en_ruta") return false;
+      if (zonaFiltro && getGroupKey(o) !== zonaFiltro) return false;
+      return true;
+    });
+  }
+
+  function fillRepartoZonaFiltro(){
+    var sel = document.getElementById("repartoZonaFiltro");
+    var current = sel.value;
+    var keys = allZoneKeys();
+    sel.innerHTML = '<option value="">Todas las zonas</option>' + keys.map(function(k){ return '<option value="'+esc(k)+'">'+esc(k)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  function renderReparto(){
+    fillRepartoZonaFiltro();
+    var list = getRepartoOrders();
+    var cont = document.getElementById("repartoContainer");
+    if (!list.length) {
+      cont.innerHTML = "";
+      document.getElementById("repartoEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("repartoEmpty").style.display = "none";
+    cont.innerHTML = list.map(function(o){
+      var mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(o.direccion + (o.ciudad ? ", " + o.ciudad : ""));
+      return '<div class="route-group">' +
+        '<div class="route-head"><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
+          '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
+        '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
+        '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
+        '<div class="btn-row" style="margin-top:8px;">' +
+          '<a class="btn btn-sm" href="'+mapsUrl+'" target="_blank" rel="noopener">Cómo llegar</a>' +
+          '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
+          '<button class="btn btn-sm btn-pink" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+  document.getElementById("repartoZonaFiltro").addEventListener("change", renderReparto);
+  document.getElementById("repartoContainer").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    var o = orders.find(function(x){ return x.id === btn.dataset.id; });
+    if (!o) return;
+    if (btn.dataset.act === "view") return showOrderModal(o);
+    if (btn.dataset.act === "deliver") return openDeliveryModal(o);
+  });
+
+  // Abre Google Maps con todas las direcciones de la zona filtrada como paradas (sin
+  // necesidad de API ni costo). Dentro de la app de Maps, con 3+ paradas, se puede usar
+  // la opción de reordenar/optimizar el orden antes de arrancar.
+  document.getElementById("btnGenerarRutaMaps").addEventListener("click", function(){
+    var list = getRepartoOrders();
+    if (!list.length) { alert("No hay pedidos \"En ruta\" con el filtro actual."); return; }
+    var direcciones = list.map(function(o){ return o.direccion + (o.ciudad ? ", " + o.ciudad : ""); });
+    if (direcciones.length === 1) {
+      window.open("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(direcciones[0]), "_blank");
+      return;
+    }
+    var destino = direcciones[direcciones.length - 1];
+    var paradas = direcciones.slice(0, -1);
+    var url = "https://www.google.com/maps/dir/?api=1" +
+      "&destination=" + encodeURIComponent(destino) +
+      "&waypoints=" + paradas.map(encodeURIComponent).join("|") +
+      "&travelmode=driving";
+    window.open(url, "_blank");
+  });
+
   function printReportByZone(){
     if (!orders.length) { alert("Aún no hay órdenes registradas."); return; }
     var selected = reportZonaSelected || {};
@@ -2553,6 +2643,7 @@
     renderDashboard();
     renderOrdersTable();
     renderRutas();
+    renderReparto();
     renderPendientes();
     renderEntregas();
   }
@@ -2648,16 +2739,20 @@
     var tabBtn = document.querySelector('button[data-view="vendedores"]');
     if (tabBtn) tabBtn.style.display = sinVendedores ? "none" : "";
 
-    // El repartidor solo necesita Órdenes (ya filtradas a "En ruta"), Rutas y Entregas.
-    ["dashboard", "pendientes", "clientes"].forEach(function(view){
+    // El repartidor solo necesita Reparto (su vista de trabajo, ya filtrada a "En ruta"),
+    // Rutas y Entregas — no le hace falta Órdenes (vista de oficina), Dashboard, Pendientes,
+    // ni Clientas. "Reparto" tampoco le sirve a Customer Service (su trabajo es aprobar).
+    ["dashboard", "ordenes", "pendientes", "clientes"].forEach(function(view){
       var btn = document.querySelector('button[data-view="'+view+'"]');
       if (btn) btn.style.display = esRep ? "none" : "";
     });
+    var repartoBtn = document.querySelector('button[data-view="reparto"]');
+    if (repartoBtn) repartoBtn.style.display = esCS ? "none" : "";
 
     // Si la pestaña que quedó activa se ocultó para este rol, manda a una segura.
     var activeBtn = document.querySelector('nav.tabs button.active');
     if (activeBtn && activeBtn.style.display === "none") {
-      var destino = esRep ? "ordenes" : "dashboard";
+      var destino = esRep ? "reparto" : "dashboard";
       document.querySelectorAll('nav.tabs button').forEach(function(b){ b.classList.remove("active"); });
       document.querySelectorAll('.view').forEach(function(v){ v.classList.remove("active"); });
       document.querySelector('button[data-view="'+destino+'"]').classList.add("active");
