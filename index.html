@@ -394,7 +394,7 @@
             <option value="pendiente">Pendiente</option>
             <option value="aprobado">Aprobado</option>
             <option value="empacado">Empacado</option>
-            <option value="envio_aprobado">Envío aprobado</option>
+            <option value="envio_aprobado">Listo para reparto</option>
             <option value="en_ruta">En ruta</option>
             <option value="entregado">Entregado</option>
           </select>
@@ -431,7 +431,7 @@
   <div class="view" id="view-aprobacion">
     <div class="panel">
       <h2>Envíos por aprobar</h2>
-      <p class="muted small">Pedidos ya empacados, listos para que decidas si salen a reparto. Aquí puedes ver el contenido completo (incluyendo si algo quedó sin surtir) pero no puedes editar nada — solo aprobar.</p>
+      <p class="muted small">Pedidos con el empaque ya cerrado (Empaquetado marcó "Empacado"), listos para que decidas si salen a reparto. Aquí puedes ver el contenido completo (incluyendo si algo quedó sin surtir y órdenes derivadas), dejar una nota si hace falta, y aprobar — no puedes editar el checklist.</p>
       <div id="aprobacionContainer"></div>
       <div class="empty" id="aprobacionEmpty" style="display:none;">No hay pedidos empacados esperando aprobación en este momento.</div>
     </div>
@@ -485,7 +485,7 @@
         <button class="btn btn-primary" id="btnMarcarEnRutaSeleccionados">Marcar en ruta y generar mapa</button>
       </div>
       <div id="listosContainer"></div>
-      <div class="empty" id="listosEmpty" style="display:none;">No hay pedidos "Envío aprobado" esperando salir en este momento.</div>
+      <div class="empty" id="listosEmpty" style="display:none;">No hay pedidos "Listo para reparto" esperando salir en este momento.</div>
     </div>
 
     <div class="panel">
@@ -900,37 +900,44 @@
   }
 
   function estadoLabel(e){
-    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", envio_aprobado:"Envío aprobado", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
+    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", envio_aprobado:"Listo para reparto", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
   }
 
   // ---------- Roles y permisos ----------
-  // "admin" (o sin rol asignado): acceso completo. "limitado": empaca normalmente (crea,
-  // edita, marca "Empacado") pero no ve Vendedores y no puede aprobar envíos ni mandar a ruta.
-  // "customer_service": no ve Vendedores, ve todo el proceso, pero su única acción es aprobar
-  // el paso Empacado → Envío aprobado (en su propia pestaña "Aprobación") — no puede crear,
+  // "admin" (o sin rol asignado): acceso completo. "limitado" ("Empaquetado" de cara a Karen,
+  // el valor guardado en Firestore sigue siendo "limitado" para no tener que reasignar cuentas
+  // ya creadas): empaca normalmente (crea, edita, marca "Empacado") pero no ve Vendedores y no
+  // puede aprobar envíos ni mandar a ruta.
+  // "customer_service": no ve Vendedores, ve todo el proceso igual que "Empaquetado" (mismas
+  // pestañas), pero además tiene su propia pestaña "Aprobación" con la cola de pedidos ya
+  // empacados (con el empaque cerrado) — ahí puede ver el detalle completo (surtido / órdenes
+  // derivadas), dejar una nota, y aprobar el paso Empacado → Listo para reparto. No puede crear,
   // editar, borrar ni retroceder nada.
-  // "repartidor": solo ve "Envío aprobado" (para elegir qué se lleva) y "En ruta" (lo que ya
+  // "repartidor": solo ve "Listo para reparto" (para elegir qué se lleva) y "En ruta" (lo que ya
   // lleva) en su pestaña "Reparto"; selecciona pedidos, los marca en ruta (genera el link de
   // Google Maps con esos) y marca entregado — nada de crear/editar/borrar.
   // Esto solo ajusta qué se muestra; la restricción real vive en las reglas de Firestore.
   function currentRole(){ return window.__aoriRole || ""; }
   function esCustomerService(){ return currentRole() === "customer_service"; }
   function esRepartidor(){ return currentRole() === "repartidor"; }
-  // Empacado → Envío aprobado (lo hace Customer Service).
+  // Empacado (con empaque cerrado) → Listo para reparto (lo hace Customer Service).
   function puedeAprobarEnvio(){ var r = currentRole(); return r === "admin" || r === "customer_service"; }
-  // Envío aprobado → En ruta (lo hace el repartidor, al seleccionar qué se lleva).
+  // Listo para reparto → En ruta (lo hace el repartidor, al seleccionar qué se lleva).
   function puedeEnviarARuta(){ var r = currentRole(); return r === "admin" || r === "repartidor"; }
-  // Puede crear/editar/borrar/retroceder órdenes libremente (admin y limitado). CS y
+  // Puede crear/editar/borrar/retroceder órdenes libremente (admin y Empaquetado). CS y
   // repartidor solo tienen su acción puntual (aprobar envío / seleccionar ruta y entregar).
   function puedeEditarOrden(){ return !esCustomerService() && !esRepartidor(); }
   // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a
-  // empacarse. "envio_aprobado" = Customer Service ya revisó el paquete empacado y autorizó
-  // que salga; falta que el repartidor lo seleccione y lo marque "en ruta".
+  // empacarse ("Iniciar empaquetado" activa el checklist). "empacado" = Empaquetado ya está
+  // trabajando el checklist; cuando termina aprieta "Empacado" (o.empaqueCerrado = true), lo
+  // que cierra la edición del checklist y hace que la orden aparezca en la cola de Customer
+  // Service. "envio_aprobado" ("Listo para reparto") = Customer Service ya revisó el paquete
+  // cerrado y autorizó que salga; falta que el repartidor lo seleccione y lo marque "en ruta".
   var ESTADO_STEPS = [
     { key: "pendiente", label: "Pendiente" },
     { key: "aprobado", label: "Aprobado" },
     { key: "empacado", label: "Empacado" },
-    { key: "envio_aprobado", label: "Envío aprobado" },
+    { key: "envio_aprobado", label: "Listo para reparto" },
     { key: "en_ruta", label: "En ruta" },
     { key: "entregado", label: "Entregado" }
   ];
@@ -939,7 +946,7 @@
     return {
       pendiente: "Aprobar surtimiento",
       aprobado: "Iniciar empaquetado",
-      empacado: "Aprobar envío",
+      empacado: "Aprobar y pasar a reparto",
       envio_aprobado: "Marcar en ruta",
       en_ruta: "Marcar entregado"
     }[estado] || "Avanzar estado";
@@ -1302,9 +1309,13 @@
       var tipo = o.tipoEntrega || "envio";
       var advanceBtn = "";
       if (o.estado !== 'entregado') {
-        if (o.estado === 'empacado') {
+        if (o.estado === 'empacado' && !o.empaqueCerrado) {
+          advanceBtn = canEdit
+            ? '<span class="badge" style="background:#eef3ff;color:#2954a3;white-space:normal;">Empacando… (usa "Ver" para marcar "Empacado")</span>'
+            : '<span class="badge" style="background:#fdf0d5;color:#8a6440;white-space:normal;">Esperando que se cierre el empaque</span>';
+        } else if (o.estado === 'empacado') {
           advanceBtn = puedeAprobarEnvio()
-            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Aprobar envío</button>'
+            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Aprobar y pasar a reparto</button>'
             : '<span class="badge" style="background:#fdf0d5;color:#8a6440;white-space:normal;">Esperando aprobación de Customer Service</span>';
         } else if (o.estado === 'envio_aprobado') {
           advanceBtn = puedeEnviarARuta()
@@ -1384,6 +1395,9 @@
     var idx = ESTADO_FLOW.indexOf(o.estado);
     if (idx <= 0) return;
     o.estado = ESTADO_FLOW[idx-1];
+    // Si se retrocede hasta "empacado" (desde "listo para reparto") o se sale de "empacado"
+    // (hacia "aprobado"), reabre el empaque para que Empaquetado pueda seguir editando el checklist.
+    if (o.estado === "empacado" || ESTADO_FLOW[idx] === "empacado") o.empaqueCerrado = false;
     saveOrder(o);
     renderAll();
   }
@@ -1404,9 +1418,13 @@
     var canEdit = puedeEditarOrden();
     var backorders = backordersDeCliente(o);
     var accionesHtml;
-    if (o.estado === 'empacado') {
+    if (o.estado === 'empacado' && !o.empaqueCerrado) {
+      accionesHtml = canEdit
+        ? '<span class="badge" style="background:#eef3ff;color:#2954a3;">Empacando… marca "Empacado" junto al checklist cuando termines</span>'
+        : '<span class="badge" style="background:#fdf0d5;color:#8a6440;">Esperando que se cierre el empaque</span>';
+    } else if (o.estado === 'empacado') {
       accionesHtml = puedeAprobarEnvio()
-        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Aprobar envío</button>'
+        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Aprobar y pasar a reparto</button>'
         : '<span class="badge" style="background:#fdf0d5;color:#8a6440;">Esperando aprobación de Customer Service</span>';
     } else if (o.estado === 'envio_aprobado') {
       accionesHtml = puedeEnviarARuta()
@@ -1469,6 +1487,7 @@
       buildContenidoSection(o) +
       (o.derivadaOrdenCode ? '<div class="kv"><b>Pendiente</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
       (o.notas ? '<div class="kv"><b>Notas</b><span>'+esc(o.notas).replace(/\n/g,'<br>')+'</span></div>' : '') +
+      (o.notasCS ? '<div class="kv"><b>Nota de Customer Service</b><span>'+esc(o.notasCS).replace(/\n/g,'<br>')+'</span></div>' : '') +
       '<div class="kv"><b>Creada</b><span>'+fmtDate(o.createdAt)+'</span></div>' +
       (o.entrega ? '<div class="kv"><b>Entregada</b><span>'+fmtDate(o.entrega.fecha)+' — recibió: '+esc(o.entrega.receptor)+'</span></div>' : '') +
       '<div class="btn-row" style="margin-top:14px;">' +
@@ -1528,6 +1547,19 @@
         generarOrdenPendiente(o);
       });
     }
+    var btnCerrarEmpaque = document.getElementById("btnCerrarEmpaque");
+    if (btnCerrarEmpaque) {
+      btnCerrarEmpaque.addEventListener("click", function(){
+        ensureOrderItems(o);
+        var pend = o.items.filter(function(it){ return !it.surtido; }).length;
+        if (pend && !confirm("Hay " + pend + " producto(s) sin marcar como surtidos. Si te falta algo, usa primero \"Generar orden con lo no surtido\". ¿Cerrar el empaque de todas formas?")) return;
+        o.empaqueCerrado = true;
+        saveOrder(o);
+        renderAll();
+        var fresh = orders.find(function(x){ return x.id === o.id; });
+        if (fresh) showOrderModal(fresh);
+      });
+    }
     Array.prototype.forEach.call(document.querySelectorAll("[data-open-order]"), function(a){
       a.addEventListener("click", function(e){
         e.preventDefault();
@@ -1540,24 +1572,30 @@
   }
 
   // Sección "Contenido" del detalle de orden: checklist marcable en "empacado", lectura simple en las demás etapas.
+  // Checklist marcable mientras se está empacando (estado "empacado" y aún sin cerrar con el
+  // botón "Empacado"); una vez cerrado (o.empaqueCerrado) queda de solo lectura para todos,
+  // incluida Empaquetado, hasta que Customer Service lo apruebe o alguien retroceda el estado.
   function buildContenidoSection(o){
     ensureOrderItems(o);
-    var editable = (o.estado === "empacado") && puedeEditarOrden();
+    var empacando = (o.estado === "empacado") && !o.empaqueCerrado && puedeEditarOrden();
     if (!o.items.length) {
       return '<div class="kv"><b>Contenido</b><span class="muted">Sin productos.</span></div>';
     }
     var rows = o.items.map(function(it, i){
-      if (editable) {
+      if (empacando) {
         return '<label class="chk-item"><input type="checkbox" class="itemSurtidoChk" data-idx="'+i+'"'+(it.surtido?' checked':'')+'> <span'+(it.surtido?'':' class="item-pend"')+'>'+esc(it.texto)+'</span></label>';
       }
       return '<div class="chk-item-ro"><span class="'+(it.surtido?'item-ok':'item-pend')+'">'+(it.surtido?'✓ ':'○ ')+esc(it.texto)+'</span></div>';
     }).join("");
     var pendCount = o.items.filter(function(it){ return !it.surtido; }).length;
     var html = '<div class="kv"><b>Contenido</b><div class="checklist-box">'+rows+'</div></div>';
-    if (editable) {
+    if (empacando) {
       html += '<div class="btn-row" style="margin:6px 0 0 120px;">' +
         '<button type="button" class="btn btn-sm btn-pink" id="btnGenerarPendiente"'+(pendCount ? '' : ' disabled')+'>Generar orden con lo no surtido'+(pendCount ? ' ('+pendCount+')' : '')+'</button>' +
+        '<button type="button" class="btn btn-sm btn-primary" id="btnCerrarEmpaque">Empacado</button>' +
       '</div>';
+    } else if (o.estado === "empacado" && o.empaqueCerrado) {
+      html += '<div class="kv"><b>Empaque</b><span class="badge" style="background:#eef3ff;color:#2954a3;">Cerrado — esperando aprobación de Customer Service</span></div>';
     }
     return html;
   }
@@ -2076,7 +2114,7 @@
   // "Envío aprobado". Cualquiera puede verla (por transparencia), pero solo quien tiene
   // puedeAprobarEnvio() (admin / customer_service) puede tocar el botón de aprobar.
   function getAprobacionOrders(){
-    return orders.filter(function(o){ return o.estado === "empacado"; });
+    return orders.filter(function(o){ return o.estado === "empacado" && o.empaqueCerrado; });
   }
 
   function renderAprobacion(){
@@ -2099,21 +2137,50 @@
           '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
         '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
         '<div class="kv"><b>Contenido</b><span>'+esc(itemsTxt)+(noSurtidos ? ' <strong style="color:#b03a2e;">('+noSurtidos+' sin surtir)</strong>' : '')+'</span></div>' +
+        (o.origenOrdenCode ? '<div class="kv"><b>Origen</b><span>Viene de <a href="#" class="order-link" data-open-order="'+esc(o.origenOrdenId)+'">'+esc(o.origenOrdenCode)+'</a> (faltantes de un pedido anterior)</span></div>' : '') +
+        (o.derivadaOrdenCode ? '<div class="kv"><b>Orden derivada</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
         (backorders.length ? '<div class="kv"><b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores.</span></div>' : '') +
+        '<div class="kv"><b>Nota</b><span><textarea class="notaCS" data-id="'+esc(o.id)+'" rows="2" style="width:100%;" placeholder="Nota opcional para esta orden…">'+esc(o.notasCS || '')+'</textarea></span></div>' +
         '<div class="btn-row" style="margin-top:8px;">' +
           '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
-          (puedeAprobar ? '<button class="btn btn-sm btn-pink" data-act="aprobar" data-id="'+o.id+'">Aprobar envío</button>' : '') +
+          (puedeAprobar ? '<button class="btn btn-sm" data-act="nota" data-id="'+o.id+'">Guardar nota</button>' : '') +
+          (puedeAprobar ? '<button class="btn btn-sm btn-pink" data-act="aprobar" data-id="'+o.id+'">Aprobar y pasar a reparto</button>' : '') +
         '</div>' +
       '</div>';
     }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("#aprobacionContainer [data-open-order]"), function(a){
+      a.addEventListener("click", function(e){
+        e.preventDefault();
+        var target = orders.find(function(x){ return x.id === a.dataset.openOrder; });
+        if (target) showOrderModal(target);
+        else alert("Esa orden ya no está disponible.");
+      });
+    });
+  }
+  function guardarNotaCS(o, cont){
+    var ta = cont.querySelector('.notaCS[data-id="'+o.id+'"]');
+    o.notasCS = ta ? ta.value.trim() : (o.notasCS || "");
+    return saveOrder(o);
   }
   document.getElementById("aprobacionContainer").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-act]");
     if (!btn) return;
     var o = orders.find(function(x){ return x.id === btn.dataset.id; });
     if (!o) return;
+    var cont = document.getElementById("aprobacionContainer");
     if (btn.dataset.act === "view") return showOrderModal(o);
-    if (btn.dataset.act === "aprobar") return advanceEstado(o);
+    if (btn.dataset.act === "nota") {
+      return guardarNotaCS(o, cont).then(function(){ alert("Nota guardada."); }).catch(function(err){
+        console.error(err);
+        alert("No se pudo guardar la nota. Revisa tu conexión e intenta de nuevo.");
+      });
+    }
+    if (btn.dataset.act === "aprobar") {
+      return guardarNotaCS(o, cont).then(function(){ advanceEstado(o); }).catch(function(err){
+        console.error(err);
+        alert("No se pudo guardar la nota, pero puedes intentar aprobar de nuevo.");
+      });
+    }
   });
 
   // Construye una URL de Google Maps con varias direcciones como paradas (gratis, sin
@@ -2309,7 +2376,7 @@
     var html = '<div class="report-page">' +
       docHeaderHtml('Reporte de paquetes por zona / pickup') +
       '<div class="muted">Generado: '+fmtDate(new Date().toISOString())+' · '+totalOrdenes+' orden(es) en las zonas seleccionadas</div>' +
-      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>Envío aprobado</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
+      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>Listo para reparto</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
       '<div style="text-align:right;font-weight:700;margin-top:6px;">Total costos de guías: '+fmtMoney(grandTotalCosto)+'</div>' +
       detail +
     '</div>';
@@ -2644,7 +2711,7 @@
       {n: counts.pendiente, l:"Pendientes"},
       {n: counts.aprobado, l:"Aprobados"},
       {n: counts.empacado, l:"Empacados"},
-      {n: counts.envio_aprobado, l:"Envío aprobado"},
+      {n: counts.envio_aprobado, l:"Listo para reparto"},
       {n: counts.en_ruta, l:"En ruta"},
       {n: counts.entregado, l:"Entregados"},
       {n: getRutas().length, l:"Rutas activas"}
