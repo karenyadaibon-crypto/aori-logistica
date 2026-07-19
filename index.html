@@ -474,6 +474,7 @@
         <select id="listosZonaFiltro"><option value="">Todas las zonas</option></select>
         <button class="btn" id="btnSeleccionarTodosListos">Seleccionar todos</button>
         <button class="btn btn-primary" id="btnMarcarEnRutaSeleccionados">Marcar en ruta y generar mapa</button>
+        <span class="muted small" id="listosSelCount"></span>
       </div>
       <div id="listosContainer"></div>
       <div class="empty" id="listosEmpty" style="display:none;">No hay pedidos "Listo para reparto" esperando salir en este momento.</div>
@@ -2213,6 +2214,13 @@
     fillListosZonaFiltro();
     var list = getListosOrders();
     var cont = document.getElementById("listosContainer");
+    // Conserva lo ya marcado: como esta vista se vuelve a dibujar cada vez que llega
+    // CUALQUIER cambio desde la nube (aunque sea de otra orden que nada tiene que ver),
+    // sin esto el repartidor perdía su selección de casillas a medio armar la ruta.
+    var seleccionadosPrevios = {};
+    Array.prototype.forEach.call(cont.querySelectorAll(".listoSel:checked"), function(cb){
+      seleccionadosPrevios[cb.dataset.id] = true;
+    });
     if (!list.length) {
       cont.innerHTML = "";
       document.getElementById("listosEmpty").style.display = "block";
@@ -2220,10 +2228,11 @@
     }
     document.getElementById("listosEmpty").style.display = "none";
     cont.innerHTML = list.map(function(o){
+      var checkedAttr = seleccionadosPrevios[o.id] ? ' checked' : '';
       return '<div class="route-group">' +
         '<div class="route-body">' +
           '<label class="chk-item" style="align-items:flex-start;">' +
-            '<input type="checkbox" class="listoSel" data-id="'+esc(o.id)+'"> ' +
+            '<input type="checkbox" class="listoSel" data-id="'+esc(o.id)+'"'+checkedAttr+'> ' +
             '<span><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
               '<div class="muted small">'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+' · '+esc(o.ruta || 'Sin asignar')+'</div>' +
             '</span>' +
@@ -2232,7 +2241,18 @@
         '</div>' +
       '</div>';
     }).join("");
+    updateListosSelCount();
   }
+  // Muestra cuántos quedaron marcados, para que se note al toque que la selección sí funciona.
+  function updateListosSelCount(){
+    var span = document.getElementById("listosSelCount");
+    if (!span) return;
+    var n = document.querySelectorAll("#listosContainer .listoSel:checked").length;
+    span.textContent = n ? n + " seleccionado(s)" : "";
+  }
+  document.getElementById("listosContainer").addEventListener("change", function(e){
+    if (e.target.classList.contains("listoSel")) updateListosSelCount();
+  });
   document.getElementById("listosZonaFiltro").addEventListener("change", renderListos);
   document.getElementById("listosContainer").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-act]");
@@ -2244,6 +2264,7 @@
     var boxes = document.querySelectorAll("#listosContainer .listoSel");
     var allChecked = boxes.length > 0 && Array.prototype.every.call(boxes, function(cb){ return cb.checked; });
     Array.prototype.forEach.call(boxes, function(cb){ cb.checked = !allChecked; });
+    updateListosSelCount();
   });
   document.getElementById("btnMarcarEnRutaSeleccionados").addEventListener("click", function(){
     var boxes = document.querySelectorAll("#listosContainer .listoSel:checked");
