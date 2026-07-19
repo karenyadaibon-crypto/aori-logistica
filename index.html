@@ -94,6 +94,7 @@
   .badge-pendiente { background: var(--warn-soft); color: var(--warn); }
   .badge-aprobado { background: #e6f7f5; color: #0f7a72; }
   .badge-empacado { background: var(--info-soft); color: var(--info); }
+  .badge-envio_aprobado { background: #fdeecb; color: #96650b; }
   .badge-en_ruta { background: var(--accent-soft); color: var(--accent-dark); }
   .badge-entregado { background: var(--ok-soft); color: var(--ok); }
   .badge-envio { background: var(--info-soft); color: var(--info); }
@@ -286,6 +287,7 @@
   <nav class="tabs" id="tabs">
     <button data-view="dashboard" class="active">Panel</button>
     <button data-view="ordenes">Órdenes</button>
+    <button data-view="aprobacion">Aprobación</button>
     <button data-view="rutas">Rutas</button>
     <button data-view="reparto">Reparto</button>
     <button data-view="pendientes">Pendientes</button>
@@ -392,6 +394,7 @@
             <option value="pendiente">Pendiente</option>
             <option value="aprobado">Aprobado</option>
             <option value="empacado">Empacado</option>
+            <option value="envio_aprobado">Envío aprobado</option>
             <option value="en_ruta">En ruta</option>
             <option value="entregado">Entregado</option>
           </select>
@@ -421,6 +424,16 @@
         <tbody id="ordersTbody"></tbody>
       </table>
       <div class="empty" id="ordersEmpty" style="display:none;">No hay órdenes que coincidan con el filtro.</div>
+    </div>
+  </div>
+
+  <!-- APROBACIÓN (Customer Service) -->
+  <div class="view" id="view-aprobacion">
+    <div class="panel">
+      <h2>Envíos por aprobar</h2>
+      <p class="muted small">Pedidos ya empacados, listos para que decidas si salen a reparto. Aquí puedes ver el contenido completo (incluyendo si algo quedó sin surtir) pero no puedes editar nada — solo aprobar.</p>
+      <div id="aprobacionContainer"></div>
+      <div class="empty" id="aprobacionEmpty" style="display:none;">No hay pedidos empacados esperando aprobación en este momento.</div>
     </div>
   </div>
 
@@ -464,11 +477,23 @@
   <!-- REPARTO -->
   <div class="view" id="view-reparto">
     <div class="panel">
-      <h2>Reparto de hoy</h2>
-      <p class="muted small">Solo los pedidos ya aprobados y en camino ("En ruta"). Elige una zona y da clic en "Generar ruta" para abrir Google Maps con todas las direcciones cargadas — dentro de Maps puedes usar la opción de reordenar/optimizar paradas antes de arrancar.</p>
+      <h2>Listos para repartir</h2>
+      <p class="muted small">Pedidos ya aprobados por Customer Service, esperando salir. Marca los que te vas a llevar en este viaje y da clic en "Marcar en ruta y generar mapa" — se abre Google Maps con esas direcciones cargadas (dentro de Maps puedes reordenar/optimizar las paradas antes de arrancar).</p>
+      <div class="filters" style="align-items:center;">
+        <select id="listosZonaFiltro"><option value="">Todas las zonas</option></select>
+        <button class="btn" id="btnSeleccionarTodosListos">Seleccionar todos</button>
+        <button class="btn btn-primary" id="btnMarcarEnRutaSeleccionados">Marcar en ruta y generar mapa</button>
+      </div>
+      <div id="listosContainer"></div>
+      <div class="empty" id="listosEmpty" style="display:none;">No hay pedidos "Envío aprobado" esperando salir en este momento.</div>
+    </div>
+
+    <div class="panel">
+      <h2>En camino ahora</h2>
+      <p class="muted small">Pedidos que ya marcaste "En ruta". Cuando entregues uno, márcalo aquí (foto y nombre de quien recibió).</p>
       <div class="filters" style="align-items:center;">
         <select id="repartoZonaFiltro"><option value="">Todas las zonas</option></select>
-        <button class="btn btn-primary" id="btnGenerarRutaMaps">Generar ruta en Google Maps</button>
+        <button class="btn" id="btnGenerarRutaMaps">Generar ruta en Google Maps</button>
       </div>
       <div id="repartoContainer"></div>
       <div class="empty" id="repartoEmpty" style="display:none;">No tienes pedidos "En ruta" en este momento.</div>
@@ -875,28 +900,37 @@
   }
 
   function estadoLabel(e){
-    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
+    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", envio_aprobado:"Envío aprobado", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
   }
 
   // ---------- Roles y permisos ----------
-  // "admin" (o sin rol asignado): acceso completo. "limitado": no ve la pestaña Vendedores.
-  // "customer_service": no ve Vendedores, ve todo el detalle de las órdenes, pero solo puede
-  // aprobar el paso Empacado → En ruta — no puede crear, editar, borrar ni retroceder nada.
-  // "repartidor": solo ve las órdenes "En ruta" (ya aprobadas) y su historial de Entregas;
-  // su única acción es marcar entregado (foto + quién recibió) — nada de crear/editar/borrar.
+  // "admin" (o sin rol asignado): acceso completo. "limitado": empaca normalmente (crea,
+  // edita, marca "Empacado") pero no ve Vendedores y no puede aprobar envíos ni mandar a ruta.
+  // "customer_service": no ve Vendedores, ve todo el proceso, pero su única acción es aprobar
+  // el paso Empacado → Envío aprobado (en su propia pestaña "Aprobación") — no puede crear,
+  // editar, borrar ni retroceder nada.
+  // "repartidor": solo ve "Envío aprobado" (para elegir qué se lleva) y "En ruta" (lo que ya
+  // lleva) en su pestaña "Reparto"; selecciona pedidos, los marca en ruta (genera el link de
+  // Google Maps con esos) y marca entregado — nada de crear/editar/borrar.
   // Esto solo ajusta qué se muestra; la restricción real vive en las reglas de Firestore.
   function currentRole(){ return window.__aoriRole || ""; }
   function esCustomerService(){ return currentRole() === "customer_service"; }
   function esRepartidor(){ return currentRole() === "repartidor"; }
-  function puedeAprobarRuta(){ var r = currentRole(); return r === "admin" || r === "customer_service"; }
+  // Empacado → Envío aprobado (lo hace Customer Service).
+  function puedeAprobarEnvio(){ var r = currentRole(); return r === "admin" || r === "customer_service"; }
+  // Envío aprobado → En ruta (lo hace el repartidor, al seleccionar qué se lleva).
+  function puedeEnviarARuta(){ var r = currentRole(); return r === "admin" || r === "repartidor"; }
   // Puede crear/editar/borrar/retroceder órdenes libremente (admin y limitado). CS y
-  // repartidor solo tienen su acción puntual (aprobar ruta / marcar entregado).
+  // repartidor solo tienen su acción puntual (aprobar envío / seleccionar ruta y entregar).
   function puedeEditarOrden(){ return !esCustomerService() && !esRepartidor(); }
-  // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a empacarse.
+  // Etapas del pedido, en orden. "aprobado" = se autorizó el surtimiento y puede empezar a
+  // empacarse. "envio_aprobado" = Customer Service ya revisó el paquete empacado y autorizó
+  // que salga; falta que el repartidor lo seleccione y lo marque "en ruta".
   var ESTADO_STEPS = [
     { key: "pendiente", label: "Pendiente" },
     { key: "aprobado", label: "Aprobado" },
     { key: "empacado", label: "Empacado" },
+    { key: "envio_aprobado", label: "Envío aprobado" },
     { key: "en_ruta", label: "En ruta" },
     { key: "entregado", label: "Entregado" }
   ];
@@ -905,7 +939,8 @@
     return {
       pendiente: "Aprobar surtimiento",
       aprobado: "Iniciar empaquetado",
-      empacado: "Marcar en ruta",
+      empacado: "Aprobar envío",
+      envio_aprobado: "Marcar en ruta",
       en_ruta: "Marcar entregado"
     }[estado] || "Avanzar estado";
   }
@@ -1268,9 +1303,13 @@
       var advanceBtn = "";
       if (o.estado !== 'entregado') {
         if (o.estado === 'empacado') {
-          advanceBtn = puedeAprobarRuta()
-            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Aprobar y enviar a ruta</button>'
+          advanceBtn = puedeAprobarEnvio()
+            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Aprobar envío</button>'
             : '<span class="badge" style="background:#fdf0d5;color:#8a6440;white-space:normal;">Esperando aprobación de Customer Service</span>';
+        } else if (o.estado === 'envio_aprobado') {
+          advanceBtn = puedeEnviarARuta()
+            ? '<button class="btn btn-sm btn-pink" data-act="advance" data-id="'+o.id+'">Marcar en ruta</button>'
+            : '<span class="badge" style="background:#fdeecb;color:#96650b;white-space:normal;">Esperando selección del repartidor</span>';
         } else if (!isCS) {
           advanceBtn = '<button class="btn btn-sm" data-act="advance" data-id="'+o.id+'">'+esc(nextActionLabel(o.estado))+'</button>';
         }
@@ -1332,7 +1371,7 @@
     }
   });
 
-  var ESTADO_FLOW = ["pendiente","aprobado","empacado","en_ruta","entregado"];
+  var ESTADO_FLOW = ["pendiente","aprobado","empacado","envio_aprobado","en_ruta","entregado"];
   function advanceEstado(o){
     var idx = ESTADO_FLOW.indexOf(o.estado);
     if (idx < 0 || idx >= ESTADO_FLOW.length - 1) return;
@@ -1366,9 +1405,13 @@
     var backorders = backordersDeCliente(o);
     var accionesHtml;
     if (o.estado === 'empacado') {
-      accionesHtml = puedeAprobarRuta()
-        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Aprobar y enviar a ruta</button>'
+      accionesHtml = puedeAprobarEnvio()
+        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Aprobar envío</button>'
         : '<span class="badge" style="background:#fdf0d5;color:#8a6440;">Esperando aprobación de Customer Service</span>';
+    } else if (o.estado === 'envio_aprobado') {
+      accionesHtml = puedeEnviarARuta()
+        ? '<button class="btn btn-pink btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">Marcar en ruta</button>'
+        : '<span class="badge" style="background:#fdeecb;color:#96650b;">Esperando selección del repartidor</span>';
     } else if (!isCS && o.estado !== 'entregado') {
       accionesHtml = '<button class="btn btn-primary btn-sm" onclick="window.__aoriAdvance(\''+o.id+'\')">'+esc(nextActionLabel(o.estado))+'</button>';
     } else {
@@ -2028,9 +2071,142 @@
     setTimeout(function(){ window.print(); }, 50);
   }
 
-  // ---------- Reparto (vista simple para repartidores) ----------
-  // Siempre solo "En ruta" — ya aprobadas por Customer Service — sin importar el rol
-  // de quien la esté viendo. Es la vista de trabajo del día para quien reparte.
+  // ---------- Aprobación (vista simple para Customer Service) ----------
+  // Cola de trabajo: solo lo que está "Empacado" esperando su aprobación para pasar a
+  // "Envío aprobado". Cualquiera puede verla (por transparencia), pero solo quien tiene
+  // puedeAprobarEnvio() (admin / customer_service) puede tocar el botón de aprobar.
+  function getAprobacionOrders(){
+    return orders.filter(function(o){ return o.estado === "empacado"; });
+  }
+
+  function renderAprobacion(){
+    var list = getAprobacionOrders();
+    var cont = document.getElementById("aprobacionContainer");
+    if (!list.length) {
+      cont.innerHTML = "";
+      document.getElementById("aprobacionEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("aprobacionEmpty").style.display = "none";
+    var puedeAprobar = puedeAprobarEnvio();
+    cont.innerHTML = list.map(function(o){
+      ensureOrderItems(o);
+      var noSurtidos = o.items.filter(function(it){ return !it.surtido; }).length;
+      var itemsTxt = o.items.length ? o.items.map(function(it){ return (it.surtido ? '✓ ' : '○ ') + it.texto; }).join(", ") : (o.contenido || "");
+      var backorders = backordersDeCliente(o);
+      return '<div class="route-group">' +
+        '<div class="route-head"><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
+          '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
+        '<div class="kv"><b>Dirección</b><span>'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+'</span></div>' +
+        '<div class="kv"><b>Contenido</b><span>'+esc(itemsTxt)+(noSurtidos ? ' <strong style="color:#b03a2e;">('+noSurtidos+' sin surtir)</strong>' : '')+'</span></div>' +
+        (backorders.length ? '<div class="kv"><b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores.</span></div>' : '') +
+        '<div class="btn-row" style="margin-top:8px;">' +
+          '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver detalle</button>' +
+          (puedeAprobar ? '<button class="btn btn-sm btn-pink" data-act="aprobar" data-id="'+o.id+'">Aprobar envío</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+  document.getElementById("aprobacionContainer").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    var o = orders.find(function(x){ return x.id === btn.dataset.id; });
+    if (!o) return;
+    if (btn.dataset.act === "view") return showOrderModal(o);
+    if (btn.dataset.act === "aprobar") return advanceEstado(o);
+  });
+
+  // Construye una URL de Google Maps con varias direcciones como paradas (gratis, sin
+  // contratar ninguna API). Con 3+ paradas, dentro de la app de Maps se puede reordenar
+  // u optimizar el orden de las paradas antes de arrancar.
+  function buildMapsUrlMulti(direcciones){
+    if (direcciones.length === 1) {
+      return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(direcciones[0]);
+    }
+    var destino = direcciones[direcciones.length - 1];
+    var paradas = direcciones.slice(0, -1);
+    return "https://www.google.com/maps/dir/?api=1" +
+      "&destination=" + encodeURIComponent(destino) +
+      "&waypoints=" + paradas.map(encodeURIComponent).join("|") +
+      "&travelmode=driving";
+  }
+
+  // ---------- Listos para repartir ("Envío aprobado": el repartidor elige qué se lleva) ----------
+  function getListosOrders(){
+    var zonaFiltro = document.getElementById("listosZonaFiltro").value;
+    return orders.filter(function(o){
+      if (o.estado !== "envio_aprobado") return false;
+      if (zonaFiltro && getGroupKey(o) !== zonaFiltro) return false;
+      return true;
+    });
+  }
+
+  function fillListosZonaFiltro(){
+    var sel = document.getElementById("listosZonaFiltro");
+    var current = sel.value;
+    var keys = allZoneKeys();
+    sel.innerHTML = '<option value="">Todas las zonas</option>' + keys.map(function(k){ return '<option value="'+esc(k)+'">'+esc(k)+'</option>'; }).join("");
+    sel.value = current;
+  }
+
+  function renderListos(){
+    fillListosZonaFiltro();
+    var list = getListosOrders();
+    var cont = document.getElementById("listosContainer");
+    if (!list.length) {
+      cont.innerHTML = "";
+      document.getElementById("listosEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("listosEmpty").style.display = "none";
+    cont.innerHTML = list.map(function(o){
+      return '<div class="route-group">' +
+        '<label class="chk-item" style="align-items:flex-start;">' +
+          '<input type="checkbox" class="listoSel" data-id="'+esc(o.id)+'"> ' +
+          '<span><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
+            '<div class="muted small">'+esc(o.direccion)+(o.ciudad ? ', '+esc(o.ciudad) : '')+' · '+esc(o.ruta || 'Sin asignar')+'</div>' +
+          '</span>' +
+        '</label>' +
+        '<div class="btn-row" style="margin-top:6px;"><button class="btn btn-sm" data-act="view" data-id="'+esc(o.id)+'">Ver detalle</button></div>' +
+      '</div>';
+    }).join("");
+  }
+  document.getElementById("listosZonaFiltro").addEventListener("change", renderListos);
+  document.getElementById("listosContainer").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    var o = orders.find(function(x){ return x.id === btn.dataset.id; });
+    if (o && btn.dataset.act === "view") showOrderModal(o);
+  });
+  document.getElementById("btnSeleccionarTodosListos").addEventListener("click", function(){
+    var boxes = document.querySelectorAll("#listosContainer .listoSel");
+    var allChecked = boxes.length > 0 && Array.prototype.every.call(boxes, function(cb){ return cb.checked; });
+    Array.prototype.forEach.call(boxes, function(cb){ cb.checked = !allChecked; });
+  });
+  document.getElementById("btnMarcarEnRutaSeleccionados").addEventListener("click", function(){
+    var boxes = document.querySelectorAll("#listosContainer .listoSel:checked");
+    var ids = Array.prototype.map.call(boxes, function(cb){ return cb.dataset.id; });
+    if (!ids.length) { alert("Selecciona al menos un pedido para armar la ruta."); return; }
+    var seleccionados = orders.filter(function(o){ return ids.indexOf(o.id) > -1; });
+    if (!confirm("Vas a marcar " + seleccionados.length + " pedido(s) como \"En ruta\" y se va a abrir el mapa con esas direcciones. ¿Continuar?")) return;
+    var btn = document.getElementById("btnMarcarEnRutaSeleccionados");
+    btn.disabled = true;
+    procesarSecuencial(seleccionados, function(o){
+      o.estado = "en_ruta";
+      return saveOrder(o);
+    }, function(){}).then(function(){
+      btn.disabled = false;
+      renderAll();
+      var direcciones = seleccionados.map(function(o){ return o.direccion + (o.ciudad ? ", " + o.ciudad : ""); });
+      window.open(buildMapsUrlMulti(direcciones), "_blank");
+    }).catch(function(err){
+      btn.disabled = false;
+      console.error(err);
+      alert("Hubo un problema marcando los pedidos en ruta. Revisa tu conexión e intenta de nuevo — ninguno se pierde, solo vuelve a intentar.");
+    });
+  });
+
+  // ---------- Reparto: "En camino ahora" ("En ruta", ya seleccionadas, falta entregar) ----------
   function getRepartoOrders(){
     var zonaFiltro = document.getElementById("repartoZonaFiltro").value;
     return orders.filter(function(o){
@@ -2059,7 +2235,7 @@
     }
     document.getElementById("repartoEmpty").style.display = "none";
     cont.innerHTML = list.map(function(o){
-      var mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(o.direccion + (o.ciudad ? ", " + o.ciudad : ""));
+      var mapsUrl = buildMapsUrlMulti([o.direccion + (o.ciudad ? ", " + o.ciudad : "")]);
       return '<div class="route-group">' +
         '<div class="route-head"><strong>'+esc(o.code)+' — '+esc(o.cliente)+'</strong>' +
           '<span class="small muted">'+esc(o.ruta || 'Sin asignar')+'</span></div>' +
@@ -2090,17 +2266,7 @@
     var list = getRepartoOrders();
     if (!list.length) { alert("No hay pedidos \"En ruta\" con el filtro actual."); return; }
     var direcciones = list.map(function(o){ return o.direccion + (o.ciudad ? ", " + o.ciudad : ""); });
-    if (direcciones.length === 1) {
-      window.open("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(direcciones[0]), "_blank");
-      return;
-    }
-    var destino = direcciones[direcciones.length - 1];
-    var paradas = direcciones.slice(0, -1);
-    var url = "https://www.google.com/maps/dir/?api=1" +
-      "&destination=" + encodeURIComponent(destino) +
-      "&waypoints=" + paradas.map(encodeURIComponent).join("|") +
-      "&travelmode=driving";
-    window.open(url, "_blank");
+    window.open(buildMapsUrlMulti(direcciones), "_blank");
   });
 
   function printReportByZone(){
@@ -2120,14 +2286,14 @@
     var summaryRows = keys.map(function(k){
       var list = grouped[k];
       totalOrdenes += list.length;
-      var c = {pendiente:0, aprobado:0, empacado:0, en_ruta:0, entregado:0};
+      var c = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0};
       var costoZona = 0;
       list.forEach(function(o){
         c[o.estado] = (c[o.estado]||0) + 1;
         if (o.guia && o.guia.costo) costoZona += Number(o.guia.costo) || 0;
       });
       grandTotalCosto += costoZona;
-      return '<tr><td>'+esc(k)+'</td><td>'+list.length+'</td><td>'+c.pendiente+'</td><td>'+c.aprobado+'</td><td>'+c.empacado+'</td><td>'+c.en_ruta+'</td><td>'+c.entregado+'</td><td>'+fmtMoney(costoZona)+'</td></tr>';
+      return '<tr><td>'+esc(k)+'</td><td>'+list.length+'</td><td>'+c.pendiente+'</td><td>'+c.aprobado+'</td><td>'+c.empacado+'</td><td>'+c.envio_aprobado+'</td><td>'+c.en_ruta+'</td><td>'+c.entregado+'</td><td>'+fmtMoney(costoZona)+'</td></tr>';
     }).join("");
     var detail = keys.map(function(k){
       var rows = grouped[k].map(function(o){
@@ -2143,7 +2309,7 @@
     var html = '<div class="report-page">' +
       docHeaderHtml('Reporte de paquetes por zona / pickup') +
       '<div class="muted">Generado: '+fmtDate(new Date().toISOString())+' · '+totalOrdenes+' orden(es) en las zonas seleccionadas</div>' +
-      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
+      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>Envío aprobado</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
       '<div style="text-align:right;font-weight:700;margin-top:6px;">Total costos de guías: '+fmtMoney(grandTotalCosto)+'</div>' +
       detail +
     '</div>';
@@ -2471,13 +2637,14 @@
 
   // ---------- Dashboard ----------
   function renderDashboard(){
-    var counts = {pendiente:0, aprobado:0, empacado:0, en_ruta:0, entregado:0};
+    var counts = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0};
     orders.forEach(function(o){ counts[o.estado] = (counts[o.estado]||0) + 1; });
     var cardsHtml = [
       {n: orders.length, l:"Órdenes totales"},
       {n: counts.pendiente, l:"Pendientes"},
       {n: counts.aprobado, l:"Aprobados"},
       {n: counts.empacado, l:"Empacados"},
+      {n: counts.envio_aprobado, l:"Envío aprobado"},
       {n: counts.en_ruta, l:"En ruta"},
       {n: counts.entregado, l:"Entregados"},
       {n: getRutas().length, l:"Rutas activas"}
@@ -2642,7 +2809,9 @@
     renderVendedorStats();
     renderDashboard();
     renderOrdersTable();
+    renderAprobacion();
     renderRutas();
+    renderListos();
     renderReparto();
     renderPendientes();
     renderEntregas();
@@ -2726,9 +2895,11 @@
   // ---------- Roles de acceso ----------
   // Por defecto cualquier cuenta tiene acceso completo ("admin"). Las cuentas que Karen
   // marque manualmente con role:"limitado", "customer_service" o "repartidor" (en Firestore,
-  // colección "users", documento = su UID) pierden la pestaña de Vendedores. "customer_service"
-  // solo puede aprobar el paso Empacado → En ruta; "repartidor" solo ve las órdenes "En ruta"
-  // y su única acción es marcar entregado (ver renderOrdersTable / showOrderModal / filteredOrders).
+  // colección "users", documento = su UID) pierden la pestaña de Vendedores. "limitado" empaca
+  // normalmente pero no puede aprobar envíos ni mandar a ruta. "customer_service" tiene su
+  // propia pestaña "Aprobación" (Empacado → Envío aprobado) y no puede crear/editar/borrar nada.
+  // "repartidor" tiene su propia pestaña "Reparto": selecciona qué se lleva (Envío aprobado →
+  // En ruta, genera el mapa) y marca entregado — nada de crear/editar/borrar tampoco.
   // La restricción real la hacen las reglas de seguridad; esto de aquí solo ajusta lo que se
   // muestra para que no confunda.
   window.__aoriApplyRole = function(){
@@ -2736,23 +2907,28 @@
     var sinVendedores = (role === "limitado" || role === "customer_service" || role === "repartidor");
     var esCS = (role === "customer_service");
     var esRep = (role === "repartidor");
+    var esLimitado = (role === "limitado");
     var tabBtn = document.querySelector('button[data-view="vendedores"]');
     if (tabBtn) tabBtn.style.display = sinVendedores ? "none" : "";
 
-    // El repartidor solo necesita Reparto (su vista de trabajo, ya filtrada a "En ruta"),
-    // Rutas y Entregas — no le hace falta Órdenes (vista de oficina), Dashboard, Pendientes,
-    // ni Clientas. "Reparto" tampoco le sirve a Customer Service (su trabajo es aprobar).
+    // El repartidor solo necesita Reparto (su vista de trabajo) y Entregas — no le hace
+    // falta Órdenes (vista de oficina), Dashboard, Pendientes, ni Clientas.
     ["dashboard", "ordenes", "pendientes", "clientes"].forEach(function(view){
       var btn = document.querySelector('button[data-view="'+view+'"]');
       if (btn) btn.style.display = esRep ? "none" : "";
     });
+    // "Aprobación" es solo para quien puede aprobar envíos (admin / customer_service).
+    var aprobBtn = document.querySelector('button[data-view="aprobacion"]');
+    if (aprobBtn) aprobBtn.style.display = (esRep || esLimitado) ? "none" : "";
+    // "Reparto" es solo para quien manda a ruta (admin / limitado / repartidor) — a
+    // Customer Service no le sirve, su trabajo termina en aprobar.
     var repartoBtn = document.querySelector('button[data-view="reparto"]');
     if (repartoBtn) repartoBtn.style.display = esCS ? "none" : "";
 
     // Si la pestaña que quedó activa se ocultó para este rol, manda a una segura.
     var activeBtn = document.querySelector('nav.tabs button.active');
     if (activeBtn && activeBtn.style.display === "none") {
-      var destino = esRep ? "reparto" : "dashboard";
+      var destino = esRep ? "reparto" : (esCS ? "aprobacion" : "dashboard");
       document.querySelectorAll('nav.tabs button').forEach(function(b){ b.classList.remove("active"); });
       document.querySelectorAll('.view').forEach(function(v){ v.classList.remove("active"); });
       document.querySelector('button[data-view="'+destino+'"]').classList.add("active");
