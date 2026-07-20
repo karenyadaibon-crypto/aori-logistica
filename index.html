@@ -270,8 +270,24 @@
       <div id="loginError" class="login-error" style="display:none;"></div>
     </form>
     <div class="login-msg">Acceso solo para el equipo de AORI.</div>
+    <div id="loginSlowNotice" style="display:none;margin-top:14px;padding:10px 12px;background:#fdf1de;border:1px solid #d9a441;border-radius:8px;font-size:12.5px;color:#8a5a09;text-align:center;">
+      Esto está tardando más de lo normal. Puede ser tu conexión a internet — si estás con datos móviles, prueba con WiFi si tienes.
+      <div style="margin-top:8px;"><button type="button" onclick="location.reload()" style="cursor:pointer;padding:6px 14px;border-radius:6px;border:1px solid #8a5a09;background:#fff;color:#8a5a09;font-weight:600;">Reintentar</button></div>
+    </div>
   </div>
 </div>
+<script>
+  // Aviso de "está tardando" si Firebase no termina de cargar rápido — sobre todo para
+  // conexiones de datos móviles lentas o inestables (ver conversación sobre el repartidor).
+  // Este script va ANTES de los <script src> de Firebase a propósito: así corre aunque
+  // esos archivos externos se traben o tarden mucho en llegar.
+  setTimeout(function(){
+    if (!window.__aoriFirebaseReady) {
+      var el = document.getElementById("loginSlowNotice");
+      if (el) el.style.display = "block";
+    }
+  }, 15000);
+</script>
 
 <div id="app" style="display:none;">
   <div class="brand">
@@ -669,8 +685,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+  // El lector de Excel (xlsx) ya NO se carga aquí de entrada — pesa bastante y solo lo usan
+  // Empaquetado/Admin al importar pedidos. Se carga bajo demanda (ver ensureXlsxLoaded más abajo)
+  // para no hacer más lenta la carga inicial de todos, en especial del repartidor en el celular.
   var firebaseConfig = {
     apiKey: "AIzaSyBW0o7GLaxP3PM7TkcobKYhjQsAzkknHVk",
     authDomain: "aori-logistica.firebaseapp.com",
@@ -680,6 +698,9 @@
     appId: "1:477833161441:web:ef7f38bc52616454465a0"
   };
   firebase.initializeApp(firebaseConfig);
+  window.__aoriFirebaseReady = true; // llegar aquí confirma que los <script> de Firebase sí cargaron
+  var el0 = document.getElementById("loginSlowNotice");
+  if (el0) el0.style.display = "none";
   var auth = firebase.auth();
   var db = firebase.firestore();
   db.enablePersistence({ synchronizeTabs: true }).catch(function(){ /* varias pestañas o navegador sin soporte: seguimos sin cache offline */ });
@@ -3214,16 +3235,46 @@
     });
   });
 
+  // El lector de Excel (xlsx) se carga bajo demanda, solo cuando alguien abre este panel —
+  // así no le pesa la carga inicial a quien nunca lo usa (sobre todo el repartidor en el celular).
+  function ensureXlsxLoaded(cb){
+    if (typeof XLSX !== "undefined") { cb(); return; }
+    if (window.__xlsxLoading) { window.__xlsxLoading.push(cb); return; }
+    window.__xlsxLoading = [cb];
+    var s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = function(){
+      var cbs = window.__xlsxLoading || [];
+      window.__xlsxLoading = null;
+      cbs.forEach(function(fn){ fn(true); });
+    };
+    s.onerror = function(){
+      var cbs = window.__xlsxLoading || [];
+      window.__xlsxLoading = null;
+      cbs.forEach(function(fn){ fn(false); });
+    };
+    document.head.appendChild(s);
+  }
+
   var btnAbrirImport = document.getElementById("btnAbrirImport");
   if (btnAbrirImport) btnAbrirImport.addEventListener("click", function(){
     document.getElementById("importFileInput").value = "";
-    document.getElementById("importSummary").textContent = "";
+    document.getElementById("importSummary").textContent = "Cargando el lector de Excel...";
     document.getElementById("importPreviewBox").innerHTML = "";
     document.getElementById("importProgress").textContent = "";
     document.getElementById("importBorrarPrevias").checked = false;
     document.getElementById("btnConfirmarImport").disabled = true;
     __importParsedOrders = [];
     openOverlay("ovImport");
+    ensureXlsxLoaded(function(ok){
+      var summaryBox = document.getElementById("importSummary");
+      if (!summaryBox) return;
+      if (ok) {
+        if (summaryBox.textContent === "Cargando el lector de Excel...") summaryBox.textContent = "";
+      } else {
+        summaryBox.textContent = "No se pudo cargar el lector de Excel (revisa tu conexión a internet) — cierra e intenta de nuevo.";
+      }
+    });
   });
 
   document.getElementById("brandLogoSlot").innerHTML = aoriLogoSvg("92px", "#a8452a");
