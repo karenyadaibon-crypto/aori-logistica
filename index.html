@@ -97,6 +97,7 @@
   .badge-envio_aprobado { background: #fdeecb; color: #96650b; }
   .badge-en_ruta { background: var(--accent-soft); color: var(--accent-dark); }
   .badge-entregado { background: var(--ok-soft); color: var(--ok); }
+  .badge-cancelado { background: #fde8e6; color: var(--danger); }
   .badge-envio { background: var(--info-soft); color: var(--info); }
   .badge-pickup { background: var(--accent-soft); color: var(--accent-dark); }
   .badge-foraneo { background: #f3e8fd; color: #6d28a4; }
@@ -404,6 +405,7 @@
             <option value="envio_aprobado">Listo para reparto</option>
             <option value="en_ruta">En ruta</option>
             <option value="entregado">Entregado</option>
+            <option value="cancelado">Cancelado</option>
           </select>
         </div>
         <div class="field"><label>Tipo</label>
@@ -419,7 +421,7 @@
         <div class="field"><label>Clienta</label><select id="fClienteFiltro"><option value="">Todas</option></select></div>
         <div class="field"><label>Desde</label><input type="date" id="fFechaDesde"></div>
         <div class="field"><label>Hasta</label><input type="date" id="fFechaHasta"></div>
-        <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente o código"></div>
+        <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente, código o teléfono"></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFiltrosOrdenes">Limpiar filtros</button></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
       </div>
@@ -913,7 +915,7 @@
   }
 
   function estadoLabel(e){
-    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", envio_aprobado:"Listo para reparto", en_ruta:"En ruta", entregado:"Entregado"}[e] || e;
+    return {pendiente:"Pendiente", aprobado:"Aprobado", empacado:"Empacado", envio_aprobado:"Listo para reparto", en_ruta:"En ruta", entregado:"Entregado", cancelado:"Cancelado"}[e] || e;
   }
 
   // ---------- Roles y permisos ----------
@@ -1295,6 +1297,7 @@
     var fd = document.getElementById("fFechaDesde").value; // "YYYY-MM-DD" o ""
     var fh = document.getElementById("fFechaHasta").value;
     var fb = document.getElementById("fBusca").value.toLowerCase().trim();
+    var fbDigits = fb.replace(/\D/g, ""); // para comparar teléfonos sin importar espacios/guiones
     var soloRepartidor = esRepartidor();
     return orders.filter(function(o){
       if (soloRepartidor && o.estado !== "en_ruta") return false;
@@ -1308,7 +1311,12 @@
         if (fd && fechaOrden && fechaOrden < fd) return false;
         if (fh && fechaOrden && fechaOrden > fh) return false;
       }
-      if (fb && !(o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1)) return false;
+      if (fb) {
+        var telefono = String(o.telefono || "");
+        var coincideTexto = o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1 || telefono.toLowerCase().indexOf(fb) > -1;
+        var coincideTelDigitos = fbDigits && telefono.replace(/\D/g, "").indexOf(fbDigits) > -1;
+        if (!coincideTexto && !coincideTelDigitos) return false;
+      }
       return true;
     });
   }
@@ -1321,7 +1329,7 @@
     tbody.innerHTML = list.map(function(o){
       var tipo = o.tipoEntrega || "envio";
       var advanceBtn = "";
-      if (o.estado !== 'entregado') {
+      if (o.estado !== 'entregado' && o.estado !== 'cancelado') {
         if (o.estado === 'empacado' && !o.empaqueCerrado) {
           advanceBtn = canEdit
             ? '<span class="badge" style="background:#eef3ff;color:#2954a3;white-space:normal;">Empacando… (usa "Ver" para marcar "Empacado")</span>'
@@ -1338,6 +1346,12 @@
           advanceBtn = '<button class="btn btn-sm" data-act="advance" data-id="'+o.id+'">'+esc(nextActionLabel(o.estado))+'</button>';
         }
       }
+      var cancelBtn = "";
+      if (canEdit) {
+        cancelBtn = (o.estado === 'cancelado')
+          ? '<button class="btn btn-sm" data-act="reactivar" data-id="'+o.id+'">Reactivar</button>'
+          : (o.estado !== 'entregado' ? '<button class="btn btn-sm btn-danger" data-act="cancelar" data-id="'+o.id+'">Cancelar orden</button>' : '');
+      }
       return '<tr>' +
         '<td><input type="checkbox" class="rowSel" data-id="'+o.id+'"></td>' +
         '<td><strong>'+esc(o.code)+'</strong><div class="muted small">'+fmtDate(o.createdAt)+'</div></td>' +
@@ -1353,11 +1367,12 @@
         '<td>'+
           '<div class="btn-row">'+
             '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver</button>'+
-            (canEdit ? '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>' : '')+
+            (canEdit && o.estado !== 'cancelado' ? '<button class="btn btn-sm" data-act="edit" data-id="'+o.id+'">Editar</button>' : '')+
             '<button class="btn btn-sm" data-act="label" data-id="'+o.id+'">Vista previa etiqueta</button>'+
-            (canEdit && o.estado !== 'pendiente' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
+            (canEdit && o.estado !== 'pendiente' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" data-act="regress" data-id="'+o.id+'">Retroceder estado</button>' : '')+
             advanceBtn +
-            (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
+            (!isCS && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" data-act="deliver" data-id="'+o.id+'">Marcar entregado</button>' : '')+
+            cancelBtn +
             (canEdit ? '<button class="btn btn-sm btn-danger" data-act="delete" data-id="'+o.id+'">Eliminar</button>' : '')+
           '</div>'+
         '</td>'+
@@ -1386,6 +1401,8 @@
     if (act === "advance") return advanceEstado(o);
     if (act === "regress") return regressEstado(o);
     if (act === "deliver") return openDeliveryModal(o);
+    if (act === "cancelar") return cancelarOrden(o);
+    if (act === "reactivar") return reactivarOrden(o);
     if (act === "delete") {
       if (confirm("¿Eliminar la orden " + o.code + "? Esta acción no se puede deshacer.")) {
         orders = orders.filter(function(x){ return x.id !== o.id; });
@@ -1394,6 +1411,33 @@
       }
     }
   });
+
+  // Cancelar NO borra la orden — la deja visible con estado "cancelado" y guarda evidencia
+  // (motivo, fecha, quién) para que quede registro. "Reactivar" la regresa al estado en el
+  // que estaba justo antes de cancelarla, conservando esa evidencia como historial.
+  function cancelarOrden(o){
+    var motivo = prompt("Motivo de la cancelación de " + o.code + " (obligatorio):");
+    if (motivo === null) return; // canceló el prompt, no hacemos nada
+    motivo = motivo.trim();
+    if (!motivo) { alert("Necesitas escribir un motivo para cancelar la orden."); return; }
+    if (!confirm("¿Cancelar la orden " + o.code + "? No se borra, pero deja de avanzar en el flujo normal.")) return;
+    o.cancelacion = {
+      motivo: motivo,
+      fecha: new Date().toISOString(),
+      canceladoPor: (auth.currentUser && auth.currentUser.email) || "",
+      estadoPrevio: o.estado
+    };
+    o.estado = "cancelado";
+    saveOrder(o);
+    renderAll();
+  }
+  function reactivarOrden(o){
+    var previo = (o.cancelacion && o.cancelacion.estadoPrevio) || "pendiente";
+    if (!confirm("¿Reactivar la orden " + o.code + "? Vuelve al estado \"" + estadoLabel(previo) + "\".")) return;
+    o.estado = previo;
+    saveOrder(o);
+    renderAll();
+  }
 
   var ESTADO_FLOW = ["pendiente","aprobado","empacado","envio_aprobado","en_ruta","entregado"];
   function advanceEstado(o){
@@ -1431,7 +1475,11 @@
     var canEdit = puedeEditarOrden();
     var backorders = backordersDeCliente(o);
     var accionesHtml;
-    if (o.estado === 'empacado' && !o.empaqueCerrado) {
+    if (o.estado === 'cancelado') {
+      accionesHtml = canEdit
+        ? '<button class="btn btn-sm" onclick="window.__aoriReactivar(\''+o.id+'\')">Reactivar</button>'
+        : '';
+    } else if (o.estado === 'empacado' && !o.empaqueCerrado) {
       accionesHtml = canEdit
         ? '<span class="badge" style="background:#eef3ff;color:#2954a3;">Empacando… marca "Empacado" junto al checklist cuando termines</span>'
         : '<span class="badge" style="background:#fdf0d5;color:#8a6440;">Esperando que se cierre el empaque</span>';
@@ -1450,7 +1498,11 @@
     }
     document.getElementById("ovOrderTitle").textContent = o.code + " — " + o.cliente;
     document.getElementById("ovOrderBody").innerHTML =
-      buildEstadoStepper(o.estado) +
+      (o.estado === 'cancelado'
+        ? '<div class="kv" style="background:#fde8e6;border:1px solid #e0a0a0;border-radius:8px;padding:10px;margin-bottom:12px;">' +
+            '<b>❌ Cancelada</b><span>' + esc((o.cancelacion && o.cancelacion.motivo) || 'Sin motivo registrado') + '</span>' +
+          '</div>'
+        : buildEstadoStepper(o.estado)) +
       (backorders.length ? (
         '<div class="kv" style="background:#fff4f4;border:1px solid #e0a0a0;border-radius:8px;padding:10px;margin-bottom:12px;">' +
           '<b>⚠ Atención</b><span>Esta clienta tiene '+backorders.length+' pedido(s) pendiente(s) derivados de faltantes anteriores: ' +
@@ -1459,8 +1511,9 @@
       ) : '') +
       '<div class="btn-row" style="margin-bottom:16px;">' +
         accionesHtml +
-        (canEdit && o.estado !== 'pendiente' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
-        (!isCS && o.estado !== 'entregado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
+        (canEdit && o.estado !== 'pendiente' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
+        (!isCS && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
+        (canEdit && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm btn-danger" onclick="window.__aoriCancelar(\''+o.id+'\')">Cancelar orden</button>' : '') +
       '</div>' +
       '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
       '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
@@ -1501,6 +1554,11 @@
       (o.derivadaOrdenCode ? '<div class="kv"><b>Pendiente</b><span>Lo no surtido se movió a <a href="#" class="order-link" data-open-order="'+esc(o.derivadaOrdenId)+'">'+esc(o.derivadaOrdenCode)+'</a></span></div>' : '') +
       (o.notas ? '<div class="kv"><b>Notas</b><span>'+esc(o.notas).replace(/\n/g,'<br>')+'</span></div>' : '') +
       (o.notasCS ? '<div class="kv"><b>Nota de Customer Service</b><span>'+esc(o.notasCS).replace(/\n/g,'<br>')+'</span></div>' : '') +
+      (o.cancelacion ? '<div class="kv"><b>' + (o.estado === 'cancelado' ? 'Cancelada' : 'Última cancelación') + '</b><span>' +
+          esc(o.cancelacion.motivo) + ' — ' + fmtDate(o.cancelacion.fecha) +
+          (o.cancelacion.canceladoPor ? ' (' + esc(o.cancelacion.canceladoPor) + ')' : '') +
+          (o.estado !== 'cancelado' ? ' <span class="muted small">— reactivada</span>' : '') +
+        '</span></div>' : '') +
       '<div class="kv"><b>Creada</b><span>'+fmtDate(o.createdAt)+'</span></div>' +
       (o.entrega ? '<div class="kv"><b>Entregada</b><span>'+fmtDate(o.entrega.fecha)+' — recibió: '+esc(o.entrega.receptor)+'</span></div>' : '') +
       '<div class="btn-row" style="margin-top:14px;">' +
@@ -1693,6 +1751,20 @@
   window.__aoriDeliverNow = function(id){
     var o = orders.find(function(x){ return x.id === id; });
     if (o) openDeliveryModal(o);
+  };
+  window.__aoriCancelar = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (!o) return;
+    cancelarOrden(o);
+    var fresh = orders.find(function(x){ return x.id === id; });
+    if (fresh) showOrderModal(fresh);
+  };
+  window.__aoriReactivar = function(id){
+    var o = orders.find(function(x){ return x.id === id; });
+    if (!o) return;
+    reactivarOrden(o);
+    var fresh = orders.find(function(x){ return x.id === id; });
+    if (fresh) showOrderModal(fresh);
   };
 
   // ---------- Editar orden ----------
@@ -2018,6 +2090,7 @@
     var zonaFiltro = document.getElementById("rutasZonaFiltro").value;
     var soloRepartidor = esRepartidor();
     return orders.filter(function(o){
+      if (o.estado === "cancelado") return false; // no necesita ruta/entrega
       if (soloRepartidor) return o.estado === "en_ruta" && (!zonaFiltro || getGroupKey(o) === zonaFiltro);
       if (soloAprobadas && o.estado === "pendiente") return false;
       if (zonaFiltro && getGroupKey(o) !== zonaFiltro) return false;
@@ -2392,14 +2465,14 @@
     var summaryRows = keys.map(function(k){
       var list = grouped[k];
       totalOrdenes += list.length;
-      var c = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0};
+      var c = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0, cancelado:0};
       var costoZona = 0;
       list.forEach(function(o){
         c[o.estado] = (c[o.estado]||0) + 1;
         if (o.guia && o.guia.costo) costoZona += Number(o.guia.costo) || 0;
       });
       grandTotalCosto += costoZona;
-      return '<tr><td>'+esc(k)+'</td><td>'+list.length+'</td><td>'+c.pendiente+'</td><td>'+c.aprobado+'</td><td>'+c.empacado+'</td><td>'+c.envio_aprobado+'</td><td>'+c.en_ruta+'</td><td>'+c.entregado+'</td><td>'+fmtMoney(costoZona)+'</td></tr>';
+      return '<tr><td>'+esc(k)+'</td><td>'+list.length+'</td><td>'+c.pendiente+'</td><td>'+c.aprobado+'</td><td>'+c.empacado+'</td><td>'+c.envio_aprobado+'</td><td>'+c.en_ruta+'</td><td>'+c.entregado+'</td><td>'+c.cancelado+'</td><td>'+fmtMoney(costoZona)+'</td></tr>';
     }).join("");
     var detail = keys.map(function(k){
       var rows = grouped[k].map(function(o){
@@ -2415,7 +2488,7 @@
     var html = '<div class="report-page">' +
       docHeaderHtml('Reporte de paquetes por zona / pickup') +
       '<div class="muted">Generado: '+fmtDate(new Date().toISOString())+' · '+totalOrdenes+' orden(es) en las zonas seleccionadas</div>' +
-      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>Listo para reparto</th><th>En ruta</th><th>Entregado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
+      '<table class="summary"><thead><tr><th>Zona / Pickup</th><th>Total</th><th>Pendiente</th><th>Aprobado</th><th>Empacado</th><th>Listo para reparto</th><th>En ruta</th><th>Entregado</th><th>Cancelado</th><th>Costo guías</th></tr></thead><tbody>'+summaryRows+'</tbody></table>' +
       '<div style="text-align:right;font-weight:700;margin-top:6px;">Total costos de guías: '+fmtMoney(grandTotalCosto)+'</div>' +
       detail +
     '</div>';
@@ -2743,7 +2816,7 @@
 
   // ---------- Dashboard ----------
   function renderDashboard(){
-    var counts = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0};
+    var counts = {pendiente:0, aprobado:0, empacado:0, envio_aprobado:0, en_ruta:0, entregado:0, cancelado:0};
     orders.forEach(function(o){ counts[o.estado] = (counts[o.estado]||0) + 1; });
     var cardsHtml = [
       {n: orders.length, l:"Órdenes totales"},
@@ -2753,6 +2826,7 @@
       {n: counts.envio_aprobado, l:"Listo para reparto"},
       {n: counts.en_ruta, l:"En ruta"},
       {n: counts.entregado, l:"Entregados"},
+      {n: counts.cancelado, l:"Cancelados"},
       {n: getRutas().length, l:"Rutas activas"}
     ].map(function(c){ return '<div class="card"><div class="num">'+c.n+'</div><div class="lbl">'+c.l+'</div></div>'; }).join("");
     document.getElementById("dashCards").innerHTML = cardsHtml;
