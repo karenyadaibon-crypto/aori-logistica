@@ -2712,20 +2712,26 @@
     var editBtn = e.target.closest("[data-edit-cliente]");
     var delBtn = e.target.closest("[data-del-cliente]");
     if (editBtn) {
-      var c = clientes.find(function(x){ return x.id === editBtn.dataset.editCliente; });
-      if (!c) return;
-      var f = document.getElementById("clienteForm");
-      f.clienteId.value = c.id;
-      f.nombre.value = c.nombre;
-      f.telefono.value = c.telefono;
-      f.direccion.value = c.direccion || "";
-      f.ciudad.value = c.ciudad || "";
-      f.estado.value = c.estado || "";
-      f.ruta.value = c.ruta || "";
-      f.notas.value = c.notas || "";
-      document.getElementById("clienteFormTitle").textContent = "Editar clienta — " + c.nombre;
-      document.getElementById("btnCancelarEdicionCliente").style.display = "";
-      f.scrollIntoView({ behavior: "smooth", block: "start" });
+      try {
+        var c = clientes.find(function(x){ return x.id === editBtn.dataset.editCliente; });
+        if (!c) { alert("No encontré esa clienta en la lista (puede que se haya actualizado la página). Refresca e intenta de nuevo."); return; }
+        var f = document.getElementById("clienteForm");
+        if (!f) { alert("No se encontró el formulario de clienta en la página (bug de la app, avísale a soporte)."); return; }
+        f.clienteId.value = c.id;
+        f.nombre.value = c.nombre;
+        f.telefono.value = c.telefono;
+        f.direccion.value = c.direccion || "";
+        f.ciudad.value = c.ciudad || "";
+        f.estado.value = c.estado || "";
+        f.ruta.value = c.ruta || "";
+        f.notas.value = c.notas || "";
+        document.getElementById("clienteFormTitle").textContent = "Editar clienta — " + c.nombre;
+        document.getElementById("btnCancelarEdicionCliente").style.display = "";
+        f.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (err) {
+        console.error("Error al abrir edición de clienta:", err);
+        alert("Hubo un problema abriendo la edición de esta clienta:\n\n" + (err && err.message ? err.message : err) + "\n\nManda una captura de este mensaje.");
+      }
     }
     if (delBtn) {
       var cid = delBtn.dataset.delCliente;
