@@ -2637,6 +2637,15 @@
   }
 
   function renderClientesManager(){
+    // Si está escribiendo en un campo en línea de esta misma tabla (ruta, ciudad,
+    // estado, vendedor), NO reconstruimos la tabla ahora: cada guardado dispara
+    // una actualización en tiempo real desde Firestore (incluso el eco de su
+    // propio cambio) que reconstruye toda la tabla y le borraría lo que sigue
+    // escribiendo antes de que alcance a guardarse. Se actualiza en cuanto
+    // termina de editar ese campo (blur) o cambia de pestaña.
+    var activo = document.activeElement;
+    var tbodyActual = document.getElementById("clientesTbody");
+    if (activo && tbodyActual && tbodyActual.contains(activo)) return;
     var busca = document.getElementById("fClienteBusca").value.toLowerCase().trim();
     var list = clientes.filter(function(c){
       if (!busca) return true;
