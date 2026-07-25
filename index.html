@@ -70,6 +70,13 @@
   }
   .field textarea { resize: vertical; min-height:56px; }
   .field input:focus, .field select:focus, .field textarea:focus { outline:1.5px solid var(--accent); border-color: var(--accent); }
+  .ruta-inline-edit, .vendedor-inline-edit, .ciudad-inline-edit, .estado-inline-edit {
+    font: inherit; font-size:13px; height:34px; padding:5px 8px;
+    border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); box-sizing:border-box;
+  }
+  .ruta-inline-edit:focus, .vendedor-inline-edit:focus, .ciudad-inline-edit:focus, .estado-inline-edit:focus {
+    outline:1.5px solid var(--accent); border-color: var(--accent);
+  }
 
   .btn {
     border:1px solid var(--line); background: var(--bg); color: var(--ink);
