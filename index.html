@@ -421,7 +421,7 @@
         <div class="field"><label>Clienta</label><select id="fClienteFiltro"><option value="">Todas</option></select></div>
         <div class="field"><label>Desde</label><input type="date" id="fFechaDesde"></div>
         <div class="field"><label>Hasta</label><input type="date" id="fFechaHasta"></div>
-        <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente, código o teléfono"></div>
+        <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente, código, teléfono o producto"></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFiltrosOrdenes">Limpiar filtros</button></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
       </div>
@@ -517,6 +517,7 @@
       <p class="muted small">Órdenes en estado "Pendiente" — incluye tanto pedidos nuevos sin aprobar como los generados automáticamente por productos que faltaron al empacar. Útil para saber qué cubrir cuando llegue inventario nuevo.</p>
       <div class="filters" style="align-items:flex-end;">
         <div class="field"><label>Filtrar por clienta</label><select id="pendClienteFiltro"><option value="">Todas las clientas</option></select></div>
+        <div class="field"><label>Buscar</label><input id="pendBusca" placeholder="Cliente, teléfono o producto"></div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding-bottom:8px;"><input type="checkbox" id="pendSoloDerivados"> Solo pedidos derivados de faltantes</label>
         <button class="btn btn-primary" id="btnPrintPendientes">Imprimir reporte</button>
       </div>
@@ -1235,6 +1236,11 @@
       return '<option value="'+esc(v)+'"'+(v === currentValue ? ' selected' : '')+'>'+esc(v)+'</option>';
     }).join("");
   }
+  function estadoMxOptionsHtml(currentValue){
+    return '<option value="">Sin asignar</option>' + ESTADOS_MX.map(function(e){
+      return '<option value="'+esc(e)+'"'+(e === currentValue ? ' selected' : '')+'>'+esc(e)+'</option>';
+    }).join("");
+  }
   function fillVendedorFilters(){
     fillVendedorSelect(document.getElementById("vendedorSelectForm"), "");
     var fSel = document.getElementById("fVendedor");
@@ -1313,7 +1319,9 @@
       }
       if (fb) {
         var telefono = String(o.telefono || "");
-        var coincideTexto = o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1 || telefono.toLowerCase().indexOf(fb) > -1;
+        var productos = (o.items && o.items.length ? o.items.map(function(it){ return it.texto; }).join(" ") : (o.contenido || ""));
+        var coincideTexto = o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1 ||
+          telefono.toLowerCase().indexOf(fb) > -1 || productos.toLowerCase().indexOf(fb) > -1;
         var coincideTelDigitos = fbDigits && telefono.replace(/\D/g, "").indexOf(fbDigits) > -1;
         if (!coincideTexto && !coincideTelDigitos) return false;
       }
@@ -2639,9 +2647,9 @@
         '<td>'+esc(c.nombre)+'</td>' +
         '<td>'+esc(c.telefono)+'</td>' +
         '<td>'+esc(c.direccion || '—')+'</td>' +
-        '<td>'+esc(c.ciudad || '—')+'</td>' +
-        '<td>'+esc(c.estado || '—')+'</td>' +
-        '<td><input class="ruta-inline-edit" style="width:100%;min-width:110px;" list="rutaList" data-ruta-cliente="'+esc(c.id)+'" value="'+esc(c.ruta || '')+'" placeholder="Sin asignar"></td>' +
+        '<td><input class="ciudad-inline-edit" style="width:100%;min-width:130px;" data-ciudad-cliente="'+esc(c.id)+'" value="'+esc(c.ciudad || '')+'" placeholder="Ciudad"></td>' +
+        '<td><select class="estado-inline-edit" style="width:100%;min-width:180px;" data-estado-cliente="'+esc(c.id)+'">'+estadoMxOptionsHtml(c.estado || '')+'</select></td>' +
+        '<td><input class="ruta-inline-edit" style="width:100%;min-width:180px;" list="rutaList" data-ruta-cliente="'+esc(c.id)+'" value="'+esc(c.ruta || '')+'" placeholder="Sin asignar"></td>' +
         '<td><select class="vendedor-inline-edit" style="width:100%;min-width:110px;" data-vendedor-cliente="'+esc(c.id)+'">'+vendedorOptionsHtml(c.vendedor || '')+'</select></td>' +
         '<td>'+contarOrdenesCliente(c)+'</td>' +
         '<td><div class="btn-row">' +
@@ -2670,6 +2678,24 @@
       var c2 = clientes.find(function(x){ return x.id === cid2; });
       if (!c2) return;
       c2.vendedor = vendedorSel.value;
+      saveClientes(clientes);
+      return;
+    }
+    var ciudadInput = e.target.closest("[data-ciudad-cliente]");
+    if (ciudadInput) {
+      var cid3 = ciudadInput.dataset.ciudadCliente;
+      var c3 = clientes.find(function(x){ return x.id === cid3; });
+      if (!c3) return;
+      c3.ciudad = ciudadInput.value.trim();
+      saveClientes(clientes);
+      return;
+    }
+    var estadoSel = e.target.closest("[data-estado-cliente]");
+    if (estadoSel) {
+      var cid4 = estadoSel.dataset.estadoCliente;
+      var c4 = clientes.find(function(x){ return x.id === cid4; });
+      if (!c4) return;
+      c4.estado = estadoSel.value;
       saveClientes(clientes);
       return;
     }
@@ -2857,9 +2883,20 @@
   function getPendientesFiltrados(){
     var clienteId = document.getElementById("pendClienteFiltro").value;
     var soloDerivados = document.getElementById("pendSoloDerivados").checked;
+    var busca = document.getElementById("pendBusca").value.toLowerCase().trim();
+    var buscaDigits = busca.replace(/\D/g, "");
     var list = getPendienteOrders();
     if (clienteId) list = list.filter(function(o){ return o.clienteId === clienteId; });
     if (soloDerivados) list = list.filter(function(o){ return !!o.origenOrdenId; });
+    if (busca) {
+      list = list.filter(function(o){
+        var telefono = String(o.telefono || "");
+        var productos = (o.items && o.items.length ? o.items.map(function(it){ return it.texto; }).join(" ") : (o.contenido || ""));
+        var coincideTexto = o.cliente.toLowerCase().indexOf(busca) > -1 || telefono.toLowerCase().indexOf(busca) > -1 || productos.toLowerCase().indexOf(busca) > -1;
+        var coincideTelDigitos = buscaDigits && telefono.replace(/\D/g, "").indexOf(buscaDigits) > -1;
+        return coincideTexto || coincideTelDigitos;
+      });
+    }
     return list;
   }
 
@@ -2937,6 +2974,7 @@
   }
   document.getElementById("pendClienteFiltro").addEventListener("change", renderPendientes);
   document.getElementById("pendSoloDerivados").addEventListener("change", renderPendientes);
+  document.getElementById("pendBusca").addEventListener("input", renderPendientes);
   document.getElementById("btnPrintPendientes").addEventListener("click", printPendientesReport);
 
   function printPendientesReport(){
