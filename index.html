@@ -609,6 +609,10 @@
       <div class="filters">
         <div class="field"><label>Buscar</label><input id="fClienteBusca" placeholder="Nombre o teléfono"></div>
       </div>
+      <p class="muted small">Si editaste rutas de clientas y sus órdenes ya existentes no aparecen al filtrar por esa ruta en la pestaña Órdenes, usa este botón una vez para ponerlas al día:</p>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button type="button" class="btn" id="btnSyncRutas">Sincronizar rutas en órdenes</button>
+      </div>
       <table>
         <thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Ciudad</th><th>Estado</th><th>Ruta</th><th>Vendedor</th><th>Órdenes</th><th>Acciones</th></tr></thead>
         <tbody id="clientesTbody"></tbody>
@@ -884,6 +888,28 @@
     return db.collection("catalogos").doc(CATALOGOS_DOC).set({ clientes: list }, { merge: true }).catch(function(err){
       console.error("No se pudieron guardar las clientas:", err);
       alert("No se pudieron guardar las clientas (revisa tu conexión).");
+    });
+  }
+  // La "ruta" de una orden se guarda como un dato propio de esa orden (para poder
+  // filtrar/organizar reparto), no como un enlace en vivo a la clienta. Por eso, si
+  // cambias la ruta de una clienta en el catálogo, sus órdenes YA creadas se quedan
+  // con la ruta vieja hasta que las actualicemos aquí — así el filtro de Ruta en
+  // Órdenes sí encuentra los pedidos con el nombre de ruta nuevo.
+  function propagarRutaAOrdenesDeCliente(clienteId, nuevaRuta){
+    if (!clienteId) return;
+    db.collection("orders").where("clienteId", "==", clienteId).get().then(function(snap){
+      if (snap.empty) return;
+      var batch = db.batch();
+      var cambios = 0;
+      snap.forEach(function(doc){
+        if ((doc.data().ruta || "") !== (nuevaRuta || "")) {
+          batch.update(doc.ref, { ruta: nuevaRuta || "" });
+          cambios++;
+        }
+      });
+      if (cambios) return batch.commit();
+    }).catch(function(err){
+      console.error("No se pudo actualizar la ruta en las órdenes de esta clienta:", err);
     });
   }
 
@@ -2677,6 +2703,51 @@
   }
   document.getElementById("fClienteBusca").addEventListener("input", renderClientesManager);
 
+  // Corrige de una sola vez todas las órdenes cuya ruta quedó desactualizada por
+  // ediciones de ruta hechas en Clientas ANTES de que existiera la sincronización
+  // automática (ver propagarRutaAOrdenesDeCliente). Deja cada orden con la ruta
+  // que tenga hoy su clienta en el catálogo.
+  function sincronizarRutasClientesAOrdenes(){
+    if (!confirm("Esto actualiza la ruta de las órdenes ya creadas para que coincida con la ruta actual de cada clienta en el catálogo. ¿Continuar?")) return;
+    var btn = document.getElementById("btnSyncRutas");
+    if (btn) { btn.disabled = true; btn.textContent = "Sincronizando..."; }
+    function restaurarBoton(){ if (btn) { btn.disabled = false; btn.textContent = "Sincronizar rutas en órdenes"; } }
+    db.collection("orders").get().then(function(snap){
+      var rutaPorCliente = {};
+      clientes.forEach(function(c){ rutaPorCliente[c.id] = c.ruta || ""; });
+      var docs = snap.docs.filter(function(doc){
+        var d = doc.data();
+        return d.clienteId && rutaPorCliente.hasOwnProperty(d.clienteId) && (d.ruta || "") !== rutaPorCliente[d.clienteId];
+      });
+      if (!docs.length) {
+        alert("Todas las órdenes ya tienen la ruta que corresponde a su clienta.");
+        restaurarBoton();
+        return;
+      }
+      var chunks = [];
+      for (var i = 0; i < docs.length; i += 450) chunks.push(docs.slice(i, i + 450));
+      var chain = Promise.resolve();
+      chunks.forEach(function(chunk){
+        chain = chain.then(function(){
+          var batch = db.batch();
+          chunk.forEach(function(doc){
+            batch.update(doc.ref, { ruta: rutaPorCliente[doc.data().clienteId] });
+          });
+          return batch.commit();
+        });
+      });
+      return chain.then(function(){
+        alert("Listo: se actualizó la ruta en " + docs.length + " orden(es).");
+        restaurarBoton();
+      });
+    }).catch(function(err){
+      console.error("Error sincronizando rutas de clientas a órdenes:", err);
+      alert("Hubo un problema sincronizando rutas (revisa tu conexión). Intenta de nuevo.");
+      restaurarBoton();
+    });
+  }
+  document.getElementById("btnSyncRutas").addEventListener("click", sincronizarRutasClientesAOrdenes);
+
   document.getElementById("clientesTbody").addEventListener("change", function(e){
     var rutaInput = e.target.closest("[data-ruta-cliente]");
     if (rutaInput) {
@@ -2685,6 +2756,7 @@
       if (!c) return;
       c.ruta = rutaInput.value.trim();
       saveClientes(clientes);
+      propagarRutaAOrdenesDeCliente(c.id, c.ruta);
       fillRutaOptions();
       return;
     }
@@ -2774,6 +2846,7 @@
         c.estado = f.estado.value.trim();
         c.ruta = f.ruta.value.trim();
         c.notas = f.notas.value.trim();
+        propagarRutaAOrdenesDeCliente(c.id, c.ruta);
       }
     } else {
       clientes.push({
