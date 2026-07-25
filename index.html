@@ -429,6 +429,13 @@
         <div class="field"><label>Desde</label><input type="date" id="fFechaDesde"></div>
         <div class="field"><label>Hasta</label><input type="date" id="fFechaHasta"></div>
         <div class="field"><label>Buscar</label><input id="fBusca" placeholder="Cliente, código, teléfono o producto"></div>
+        <div class="field"><label>Ordenar por número</label>
+          <select id="fOrden">
+            <option value="">Más reciente primero</option>
+            <option value="asc">Número: menor a mayor</option>
+            <option value="desc">Número: mayor a menor</option>
+          </select>
+        </div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFiltrosOrdenes">Limpiar filtros</button></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
       </div>
@@ -1138,6 +1145,7 @@
   document.getElementById("fFechaDesde").addEventListener("change", renderOrdersTable);
   document.getElementById("fFechaHasta").addEventListener("change", renderOrdersTable);
   document.getElementById("fBusca").addEventListener("input", renderOrdersTable);
+  document.getElementById("fOrden").addEventListener("change", renderOrdersTable);
   document.getElementById("btnLimpiarFiltrosOrdenes").addEventListener("click", function(){
     document.getElementById("fEstado").value = "";
     document.getElementById("fTipo").value = "";
@@ -1147,6 +1155,7 @@
     document.getElementById("fFechaDesde").value = "";
     document.getElementById("fFechaHasta").value = "";
     document.getElementById("fBusca").value = "";
+    document.getElementById("fOrden").value = "";
     renderOrdersTable();
   });
 
@@ -1337,8 +1346,9 @@
     var fh = document.getElementById("fFechaHasta").value;
     var fb = document.getElementById("fBusca").value.toLowerCase().trim();
     var fbDigits = fb.replace(/\D/g, ""); // para comparar teléfonos sin importar espacios/guiones
+    var fo = document.getElementById("fOrden").value; // "" = más reciente primero, "asc"/"desc" = por número de orden
     var soloRepartidor = esRepartidor();
-    return orders.filter(function(o){
+    var resultado = orders.filter(function(o){
       if (soloRepartidor && o.estado !== "en_ruta") return false;
       if (fe && o.estado !== fe) return false;
       if (ft && (o.tipoEntrega || "envio") !== ft) return false;
@@ -1360,6 +1370,15 @@
       }
       return true;
     });
+    if (fo === "asc" || fo === "desc") {
+      resultado = resultado.slice().sort(function(a, b){
+        var ca = a.code || "", cb = b.code || "";
+        if (ca === cb) return 0;
+        var cmp = ca < cb ? -1 : 1;
+        return fo === "asc" ? cmp : -cmp;
+      });
+    }
+    return resultado;
   }
 
   function renderOrdersTable(){
