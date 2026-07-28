@@ -317,6 +317,8 @@
     <button data-view="rutas">Rutas</button>
     <button data-view="reparto">Reparto</button>
     <button data-view="pendientes">Pendientes</button>
+    <button data-view="reportediario">Reporte diario</button>
+    <button data-view="pendientesporclienta">Pendientes por clienta</button>
     <button data-view="entregas">Entregas</button>
     <button data-view="vendedores">Vendedores</button>
     <button data-view="clientes">Clientas</button>
@@ -438,6 +440,7 @@
         </div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnLimpiarFiltrosOrdenes">Limpiar filtros</button></div>
         <div class="field" style="flex:0;"><label>&nbsp;</label><button class="btn" id="btnPrintSelected">Vista previa etiquetas seleccionadas</button></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;height:34px;font-weight:400;"><input type="checkbox" id="fOrdenMostrarElim"> Mostrar eliminadas</label></div>
       </div>
       <table>
         <thead><tr>
@@ -542,6 +545,45 @@
     </div>
   </div>
 
+  <!-- REPORTE DIARIO -->
+  <div class="view" id="view-reportediario">
+    <div class="panel">
+      <h2>Reporte diario de empaque</h2>
+      <p class="muted small">El "día" se cuenta desde que se cierra el empaque de cada pedido (botón "Empacado" en el checklist), no desde que se creó el pedido.</p>
+      <div class="filters" style="align-items:flex-end;">
+        <div class="field"><label>Fecha</label><input type="date" id="repDiaFecha"></div>
+        <button class="btn" id="btnRepDiaHoy">Hoy</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 id="repDiaEmpacadosTitulo">Pedidos empacados</h2>
+      <div id="repDiaEmpacadosBox"></div>
+      <div class="empty" id="repDiaEmpacadosEmpty" style="display:none;">No se cerró el empaque de ningún pedido en esta fecha.</div>
+    </div>
+    <div class="panel">
+      <h2 id="repDiaNoSurtidosTitulo">Productos no surtidos de lo empacado ese día</h2>
+      <div id="repDiaNoSurtidosBox"></div>
+      <div class="empty" id="repDiaNoSurtidosEmpty" style="display:none;">Todo lo empacado en esta fecha se surtió completo.</div>
+    </div>
+    <div class="panel">
+      <h2>Pedidos que aún no inician su empaque</h2>
+      <p class="muted small">Esto es siempre "ahora mismo" (no depende de la fecha de arriba): pedidos ya aprobados que todavía nadie ha empezado a empacar.</p>
+      <div id="repDiaSinIniciarBox"></div>
+      <div class="empty" id="repDiaSinIniciarEmpty" style="display:none;">No hay pedidos esperando para empezar a empacarse.</div>
+    </div>
+  </div>
+
+  <!-- PENDIENTES POR CLIENTA -->
+  <div class="view" id="view-pendientesporclienta">
+    <div class="panel">
+      <h2>Pendientes por clienta</h2>
+      <p class="muted small">Para cada clienta, todo lo que le ha quedado sin surtir en cualquiera de sus pedidos (incluye pedidos ya entregados o cancelados). Se actualiza solo conforme se va marcando lo surtido.</p>
+      <div class="filters"><div class="field"><label>Buscar clienta</label><input id="pxcBusca" placeholder="Nombre o teléfono"></div></div>
+      <div id="pxcBox"></div>
+      <div class="empty" id="pxcEmpty" style="display:none;">Ninguna clienta tiene productos pendientes por surtir en este momento.</div>
+    </div>
+  </div>
+
   <!-- ENTREGAS -->
   <div class="view" id="view-entregas">
     <div class="panel">
@@ -615,6 +657,7 @@
       <h2>Clientas registradas</h2>
       <div class="filters">
         <div class="field"><label>Buscar</label><input id="fClienteBusca" placeholder="Nombre o teléfono"></div>
+        <div class="field" style="flex:0;"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;height:34px;font-weight:400;"><input type="checkbox" id="fClienteMostrarElim"> Mostrar eliminadas</label></div>
       </div>
       <p class="muted small">Si editaste rutas de clientas y sus órdenes ya existentes no aparecen al filtrar por esa ruta en la pestaña Órdenes, usa este botón una vez para ponerlas al día:</p>
       <div class="btn-row" style="margin-bottom:12px;">
@@ -921,6 +964,7 @@
   }
 
   var orders = [];
+  var ordersEliminadas = [];
   var zonas = [];
   var vendedores = [];
   var clientes = [];
@@ -947,6 +991,8 @@
     var v = Math.round(Number(n || 0));
     return "$" + v.toLocaleString('es-CO');
   }
+
+  function todayStr(){ return new Date().toISOString().slice(0, 10); }
 
   function fmtDate(iso){
     var d = new Date(iso);
@@ -1146,6 +1192,7 @@
   document.getElementById("fFechaHasta").addEventListener("change", renderOrdersTable);
   document.getElementById("fBusca").addEventListener("input", renderOrdersTable);
   document.getElementById("fOrden").addEventListener("change", renderOrdersTable);
+  document.getElementById("fOrdenMostrarElim").addEventListener("change", renderOrdersTable);
   document.getElementById("btnLimpiarFiltrosOrdenes").addEventListener("click", function(){
     document.getElementById("fEstado").value = "";
     document.getElementById("fTipo").value = "";
@@ -1156,6 +1203,7 @@
     document.getElementById("fFechaHasta").value = "";
     document.getElementById("fBusca").value = "";
     document.getElementById("fOrden").value = "";
+    document.getElementById("fOrdenMostrarElim").checked = false;
     renderOrdersTable();
   });
 
@@ -1348,6 +1396,26 @@
     var fbDigits = fb.replace(/\D/g, ""); // para comparar teléfonos sin importar espacios/guiones
     var fo = document.getElementById("fOrden").value; // "" = más reciente primero, "asc"/"desc" = por número de orden
     var soloRepartidor = esRepartidor();
+    var mostrarElim = document.getElementById("fOrdenMostrarElim").checked;
+    if (mostrarElim) {
+      // En modo "eliminadas" solo aplican búsqueda de texto y orden por número —
+      // los demás filtros (estado, ruta, etc.) no son relevantes para la papelera.
+      var resultadoElim = ordersEliminadas.filter(function(o){
+        if (!fb) return true;
+        var telefono = String(o.telefono || "");
+        return o.cliente.toLowerCase().indexOf(fb) > -1 || o.code.toLowerCase().indexOf(fb) > -1 ||
+          telefono.toLowerCase().indexOf(fb) > -1 || (fbDigits && telefono.replace(/\D/g, "").indexOf(fbDigits) > -1);
+      });
+      if (fo === "asc" || fo === "desc") {
+        resultadoElim = resultadoElim.slice().sort(function(a, b){
+          var ca = a.code || "", cb = b.code || "";
+          if (ca === cb) return 0;
+          var cmp = ca < cb ? -1 : 1;
+          return fo === "asc" ? cmp : -cmp;
+        });
+      }
+      return resultadoElim;
+    }
     var resultado = orders.filter(function(o){
       if (soloRepartidor && o.estado !== "en_ruta") return false;
       if (fe && o.estado !== fe) return false;
@@ -1386,6 +1454,23 @@
     var list = filteredOrders();
     var isCS = esCustomerService();
     var canEdit = puedeEditarOrden();
+    var mostrarElim = document.getElementById("fOrdenMostrarElim").checked;
+    if (mostrarElim) {
+      tbody.innerHTML = list.map(function(o){
+        return '<tr style="opacity:.65;">' +
+          '<td></td>' +
+          '<td><strong>'+esc(o.code)+'</strong><div class="muted small">'+fmtDate(o.createdAt)+'</div></td>' +
+          '<td>'+esc(o.cliente)+'<div class="muted small">'+esc(o.telefono)+'</div></td>' +
+          '<td colspan="4"><div class="muted small">Eliminada: '+esc((o.eliminada && o.eliminada.motivo) || '')+' — '+fmtDate(o.eliminada && o.eliminada.fecha)+(o.eliminada && o.eliminada.eliminadoPor ? ' ('+esc(o.eliminada.eliminadoPor)+')' : '')+'</div></td>' +
+          '<td><div class="btn-row">' +
+            '<button class="btn btn-sm" data-act="view" data-id="'+o.id+'">Ver</button>' +
+            (canEdit ? '<button class="btn btn-sm" data-act="restore" data-id="'+o.id+'">Restaurar</button>' : '') +
+          '</div></td>' +
+        '</tr>';
+      }).join("");
+      document.getElementById("ordersEmpty").style.display = list.length ? "none" : "block";
+      return;
+    }
     tbody.innerHTML = list.map(function(o){
       var tipo = o.tipoEntrega || "envio";
       var advanceBtn = "";
@@ -1452,7 +1537,8 @@
   document.getElementById("ordersTbody").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-act]");
     if (!btn) return;
-    var o = orders.find(function(x){ return x.id === btn.dataset.id; });
+    var o = orders.find(function(x){ return x.id === btn.dataset.id; }) ||
+      ordersEliminadas.find(function(x){ return x.id === btn.dataset.id; });
     if (!o) return;
     var act = btn.dataset.act;
     if (act === "view") return showOrderModal(o);
@@ -1463,14 +1549,32 @@
     if (act === "deliver") return openDeliveryModal(o);
     if (act === "cancelar") return cancelarOrden(o);
     if (act === "reactivar") return reactivarOrden(o);
-    if (act === "delete") {
-      if (confirm("¿Eliminar la orden " + o.code + "? Esta acción no se puede deshacer.")) {
-        orders = orders.filter(function(x){ return x.id !== o.id; });
-        deleteOrderDoc(o.id);
-        renderAll();
-      }
-    }
+    if (act === "delete") return eliminarOrden(o);
+    if (act === "restore") return restaurarOrden(o);
   });
+
+  // Eliminar NO borra la orden de Firestore — la marca con evidencia (motivo, fecha,
+  // quién) y desaparece de todas las listas/reportes normales, pero queda disponible
+  // en "Mostrar eliminadas" por si hay que restaurarla (ver caso de la orden 104).
+  function eliminarOrden(o){
+    var motivo = prompt("Motivo para eliminar la orden " + o.code + " (obligatorio):");
+    if (motivo === null) return;
+    motivo = motivo.trim();
+    if (!motivo) { alert("Necesitas escribir un motivo para eliminar la orden."); return; }
+    o.eliminada = {
+      motivo: motivo,
+      fecha: new Date().toISOString(),
+      eliminadoPor: (auth.currentUser && auth.currentUser.email) || ""
+    };
+    saveOrder(o);
+    renderAll();
+  }
+  function restaurarOrden(o){
+    if (!confirm("¿Restaurar la orden " + o.code + "? Vuelve a aparecer en las listas normales.")) return;
+    delete o.eliminada;
+    saveOrder(o);
+    renderAll();
+  }
 
   // Cancelar NO borra la orden — la deja visible con estado "cancelado" y guarda evidencia
   // (motivo, fecha, quién) para que quede registro. "Reactivar" la regresa al estado en el
@@ -1535,7 +1639,11 @@
     var canEdit = puedeEditarOrden();
     var backorders = backordersDeCliente(o);
     var accionesHtml;
-    if (o.estado === 'cancelado') {
+    if (o.eliminada) {
+      accionesHtml = canEdit
+        ? '<button class="btn btn-sm" onclick="window.__aoriRestaurar(\''+o.id+'\')">Restaurar</button>'
+        : '';
+    } else if (o.estado === 'cancelado') {
       accionesHtml = canEdit
         ? '<button class="btn btn-sm" onclick="window.__aoriReactivar(\''+o.id+'\')">Reactivar</button>'
         : '';
@@ -1571,9 +1679,9 @@
       ) : '') +
       '<div class="btn-row" style="margin-bottom:16px;">' +
         accionesHtml +
-        (canEdit && o.estado !== 'pendiente' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
-        (!isCS && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
-        (canEdit && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm btn-danger" onclick="window.__aoriCancelar(\''+o.id+'\')">Cancelar orden</button>' : '') +
+        (!o.eliminada && canEdit && o.estado !== 'pendiente' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriRegress(\''+o.id+'\')">Retroceder estado</button>' : '') +
+        (!o.eliminada && !isCS && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm" onclick="window.__aoriDeliverNow(\''+o.id+'\')">Marcar entregado directamente</button>' : '') +
+        (!o.eliminada && canEdit && o.estado !== 'entregado' && o.estado !== 'cancelado' ? '<button class="btn btn-sm btn-danger" onclick="window.__aoriCancelar(\''+o.id+'\')">Cancelar orden</button>' : '') +
       '</div>' +
       '<div class="kv"><b>Cliente</b><span>'+esc(o.cliente)+'</span></div>' +
       '<div class="kv"><b>Teléfono</b><span>'+esc(o.telefono)+'</span></div>' +
@@ -1685,6 +1793,7 @@
         var pend = o.items.filter(function(it){ return !it.surtido; }).length;
         if (pend && !confirm("Hay " + pend + " producto(s) sin marcar como surtidos. Si te falta algo, usa primero \"Generar orden con lo no surtido\". ¿Cerrar el empaque de todas formas?")) return;
         o.empaqueCerrado = true;
+        o.empacadoEn = new Date().toISOString(); // fecha real de empaque, para el Reporte diario
         saveOrder(o);
         renderAll();
         var fresh = orders.find(function(x){ return x.id === o.id; });
@@ -1825,6 +1934,12 @@
     reactivarOrden(o);
     var fresh = orders.find(function(x){ return x.id === id; });
     if (fresh) showOrderModal(fresh);
+  };
+  window.__aoriRestaurar = function(id){
+    var o = ordersEliminadas.find(function(x){ return x.id === id; });
+    if (!o) return;
+    restaurarOrden(o);
+    document.getElementById("ovOrder").classList.remove("open");
   };
 
   // ---------- Editar orden ----------
@@ -2632,7 +2747,9 @@
   function findClienteByTelefono(telefono){
     var t = String(telefono || "").trim();
     if (!t) return null;
-    return clientes.find(function(c){ return String(c.telefono || "").trim() === t; }) || null;
+    // Ignora clientas eliminadas: si vuelve a llegar un pedido con ese teléfono,
+    // se crea una clienta nueva y activa en vez de reengancharse a la archivada.
+    return clientes.find(function(c){ return String(c.telefono || "").trim() === t && !c.eliminada; }) || null;
   }
 
   // Busca una clienta por teléfono; si no existe, la crea a partir de los datos de la orden.
@@ -2658,7 +2775,7 @@
   function fillClienteSelectForm(){
     var sel = document.getElementById("clienteSelectForm");
     var current = sel.value;
-    var list = clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    var list = clientes.filter(function(c){ return !c.eliminada; }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
     sel.innerHTML = '<option value="">— Nueva clienta / escribir manualmente —</option>' +
       list.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.nombre)+' — '+esc(c.telefono)+'</option>'; }).join("");
     sel.value = current;
@@ -2692,7 +2809,9 @@
     var tbodyActual = document.getElementById("clientesTbody");
     if (activo && tbodyActual && tbodyActual.contains(activo)) return;
     var busca = document.getElementById("fClienteBusca").value.toLowerCase().trim();
+    var mostrarElim = document.getElementById("fClienteMostrarElim").checked;
     var list = clientes.filter(function(c){
+      if (mostrarElim) { if (!c.eliminada) return false; } else { if (c.eliminada) return false; }
       if (!busca) return true;
       return c.nombre.toLowerCase().indexOf(busca) > -1 || String(c.telefono||"").toLowerCase().indexOf(busca) > -1;
     }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
@@ -2700,10 +2819,25 @@
     if (!list.length) {
       tbody.innerHTML = "";
       document.getElementById("clientesEmpty").style.display = "block";
+      document.getElementById("clientesEmpty").textContent = mostrarElim ? "No hay clientas eliminadas." : "Aún no has cargado clientas.";
       return;
     }
     document.getElementById("clientesEmpty").style.display = "none";
     tbody.innerHTML = list.map(function(c){
+      if (c.eliminada) {
+        return '<tr style="opacity:.65;">' +
+          '<td>'+esc(c.nombre)+'</td>' +
+          '<td>'+esc(c.telefono)+'</td>' +
+          '<td>'+esc(c.direccion || '—')+'</td>' +
+          '<td>'+esc(c.ciudad || '—')+'</td>' +
+          '<td>'+esc(c.estado || '—')+'</td>' +
+          '<td>'+esc(c.ruta || '—')+'</td>' +
+          '<td>'+esc(c.vendedor || '—')+'</td>' +
+          '<td>'+contarOrdenesCliente(c)+'</td>' +
+          '<td><div class="muted small" style="margin-bottom:6px;">Eliminada: '+esc(c.eliminada.motivo)+' — '+fmtDate(c.eliminada.fecha)+(c.eliminada.eliminadoPor ? ' ('+esc(c.eliminada.eliminadoPor)+')' : '')+'</div>' +
+            '<div class="btn-row"><button class="btn btn-sm" data-restore-cliente="'+esc(c.id)+'">Restaurar</button></div></td>' +
+        '</tr>';
+      }
       return '<tr>' +
         '<td>'+esc(c.nombre)+'</td>' +
         '<td>'+esc(c.telefono)+'</td>' +
@@ -2721,6 +2855,7 @@
     }).join("");
   }
   document.getElementById("fClienteBusca").addEventListener("input", renderClientesManager);
+  document.getElementById("fClienteMostrarElim").addEventListener("change", renderClientesManager);
 
   // Corrige de una sola vez todas las órdenes cuya ruta quedó desactualizada por
   // ediciones de ruta hechas en Clientas ANTES de que existiera la sincronización
@@ -2811,6 +2946,7 @@
   document.getElementById("clientesTbody").addEventListener("click", function(e){
     var editBtn = e.target.closest("[data-edit-cliente]");
     var delBtn = e.target.closest("[data-del-cliente]");
+    var restoreBtn = e.target.closest("[data-restore-cliente]");
     if (editBtn) {
       try {
         var c = clientes.find(function(x){ return x.id === editBtn.dataset.editCliente; });
@@ -2836,8 +2972,25 @@
     if (delBtn) {
       var cid = delBtn.dataset.delCliente;
       var cc = clientes.find(function(x){ return x.id === cid; });
-      if (cc && confirm('¿Eliminar a "'+cc.nombre+'" del catálogo? Las órdenes ya creadas conservan sus datos.')) {
-        clientes = clientes.filter(function(x){ return x.id !== cid; });
+      if (cc) {
+        var motivo = prompt('Motivo para eliminar a "'+cc.nombre+'" (obligatorio):');
+        if (motivo === null) return;
+        motivo = motivo.trim();
+        if (!motivo) { alert("Necesitas escribir un motivo para eliminar a esta clienta."); return; }
+        cc.eliminada = {
+          motivo: motivo,
+          fecha: new Date().toISOString(),
+          eliminadoPor: (auth.currentUser && auth.currentUser.email) || ""
+        };
+        saveClientes(clientes);
+        renderAll();
+      }
+    }
+    if (restoreBtn) {
+      var rid = restoreBtn.dataset.restoreCliente;
+      var rc = clientes.find(function(x){ return x.id === rid; });
+      if (rc && confirm('¿Restaurar a "'+rc.nombre+'"? Vuelve a aparecer como clienta activa.')) {
+        delete rc.eliminada;
         saveClientes(clientes);
         renderAll();
       }
@@ -3128,6 +3281,111 @@
     setTimeout(function(){ window.print(); }, 50);
   }
 
+  // ---------- Reporte diario de empaque ----------
+  // "El día" se define por o.empacadoEn (momento en que se cerró el checklist de
+  // empaque, ver btnCerrarEmpaque), NO por o.createdAt — un pedido puede crearse un
+  // día y empacarse otro. Las secciones 1 y 2 dependen de la fecha elegida; la
+  // sección 3 (pedidos que no han iniciado empaque) es siempre el estado actual.
+  function renderReporteDiario(){
+    var fechaSel = document.getElementById("repDiaFecha").value || todayStr();
+
+    var empacadosDia = orders.filter(function(o){
+      return o.empaqueCerrado && o.empacadoEn && o.empacadoEn.slice(0, 10) === fechaSel;
+    }).sort(function(a, b){ return (a.empacadoEn || "").localeCompare(b.empacadoEn || ""); });
+
+    document.getElementById("repDiaEmpacadosTitulo").textContent = "Pedidos empacados (" + empacadosDia.length + ")";
+    var boxEmp = document.getElementById("repDiaEmpacadosBox");
+    document.getElementById("repDiaEmpacadosEmpty").style.display = empacadosDia.length ? "none" : "block";
+    boxEmp.innerHTML = !empacadosDia.length ? "" :
+      '<table><thead><tr><th>Código</th><th>Cliente</th><th>Hora en que se cerró el empaque</th></tr></thead><tbody>' +
+      empacadosDia.map(function(o){
+        return '<tr><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+fmtDate(o.empacadoEn)+'</td></tr>';
+      }).join("") + '</tbody></table>';
+
+    var counts = {};
+    empacadosDia.forEach(function(o){
+      ensureOrderItems(o);
+      o.items.filter(function(it){ return !it.surtido; }).forEach(function(it){
+        if (!counts[it.texto]) counts[it.texto] = { n: 0, pedidos: [] };
+        counts[it.texto].n++;
+        counts[it.texto].pedidos.push(o.code);
+      });
+    });
+    var nsKeys = Object.keys(counts).sort(function(a, b){ return counts[b].n - counts[a].n; });
+    document.getElementById("repDiaNoSurtidosTitulo").textContent = "Productos no surtidos de lo empacado ese día (" + nsKeys.length + ")";
+    var boxNS = document.getElementById("repDiaNoSurtidosBox");
+    document.getElementById("repDiaNoSurtidosEmpty").style.display = nsKeys.length ? "none" : "block";
+    boxNS.innerHTML = !nsKeys.length ? "" :
+      '<table><thead><tr><th>Producto</th><th>Veces pendiente</th><th>Pedidos</th></tr></thead><tbody>' +
+      nsKeys.map(function(k){
+        return '<tr><td>'+esc(k)+'</td><td>'+counts[k].n+'</td><td>'+esc(counts[k].pedidos.join(", "))+'</td></tr>';
+      }).join("") + '</tbody></table>';
+
+    var sinIniciar = orders.filter(function(o){ return o.estado === "aprobado"; })
+      .sort(function(a, b){ return (a.createdAt || "").localeCompare(b.createdAt || ""); });
+    var boxSI = document.getElementById("repDiaSinIniciarBox");
+    document.getElementById("repDiaSinIniciarEmpty").style.display = sinIniciar.length ? "none" : "block";
+    boxSI.innerHTML = !sinIniciar.length ? "" :
+      '<table><thead><tr><th>Código</th><th>Cliente</th><th>Aprobado desde</th></tr></thead><tbody>' +
+      sinIniciar.map(function(o){
+        return '<tr><td>'+esc(o.code)+'</td><td>'+esc(o.cliente)+'</td><td>'+fmtDate(o.createdAt)+'</td></tr>';
+      }).join("") + '</tbody></table>';
+  }
+  document.getElementById("repDiaFecha").value = todayStr();
+  document.getElementById("repDiaFecha").addEventListener("change", renderReporteDiario);
+  document.getElementById("btnRepDiaHoy").addEventListener("click", function(){
+    document.getElementById("repDiaFecha").value = todayStr();
+    renderReporteDiario();
+  });
+
+  // ---------- Pendientes por clienta (historial completo) ----------
+  // A diferencia de la pestaña "Pendientes" (que solo mira pedidos completos en
+  // estado "pendiente"), aquí se revisa item por item en TODOS los pedidos de cada
+  // clienta sin importar el estado — incluye entregados y cancelados — para que se
+  // vea todo lo que alguna vez quedó sin surtir. Se actualiza solo, porque lee
+  // directo de "orders" (sincronizado en tiempo real).
+  function getPendientesPorClienta(){
+    var porCliente = {};
+    orders.forEach(function(o){
+      ensureOrderItems(o);
+      var faltantes = o.items.filter(function(it){ return !it.surtido; });
+      if (!faltantes.length) return;
+      var key = o.clienteId || o.telefono || o.cliente;
+      if (!porCliente[key]) porCliente[key] = { nombre: o.cliente, telefono: o.telefono, items: [] };
+      faltantes.forEach(function(it){
+        porCliente[key].items.push({ texto: it.texto, code: o.code, estado: o.estado, fecha: o.createdAt });
+      });
+    });
+    return porCliente;
+  }
+  function renderPendientesPorClienta(){
+    var busca = document.getElementById("pxcBusca").value.toLowerCase().trim();
+    var porCliente = getPendientesPorClienta();
+    var keys = Object.keys(porCliente).filter(function(k){
+      if (!busca) return true;
+      var g = porCliente[k];
+      return g.nombre.toLowerCase().indexOf(busca) > -1 || String(g.telefono || "").toLowerCase().indexOf(busca) > -1;
+    }).sort(function(a, b){ return porCliente[a].nombre.localeCompare(porCliente[b].nombre); });
+    var box = document.getElementById("pxcBox");
+    if (!keys.length) {
+      box.innerHTML = "";
+      document.getElementById("pxcEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("pxcEmpty").style.display = "none";
+    box.innerHTML = keys.map(function(k){
+      var g = porCliente[k];
+      var rows = g.items.slice().sort(function(a, b){ return (b.fecha || "").localeCompare(a.fecha || ""); }).map(function(it){
+        return '<tr><td>'+esc(it.texto)+'</td><td>'+esc(it.code)+'</td><td><span class="badge badge-'+it.estado+'">'+estadoLabel(it.estado)+'</span></td><td>'+fmtDate(it.fecha)+'</td></tr>';
+      }).join("");
+      return '<div class="route-group">' +
+        '<div class="route-head"><strong>'+esc(g.nombre)+'</strong><span class="small muted">'+esc(g.telefono || '')+' · '+g.items.length+' producto(s) pendiente(s)</span></div>' +
+        '<table><thead><tr><th>Producto</th><th>Pedido</th><th>Estado del pedido</th><th>Fecha</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+      '</div>';
+    }).join("");
+  }
+  document.getElementById("pxcBusca").addEventListener("input", renderPendientesPorClienta);
+
   function renderAll(){
     fillRutaOptions();
     fillEstadoOptions();
@@ -3146,6 +3404,8 @@
     renderListos();
     renderReparto();
     renderPendientes();
+    renderReporteDiario();
+    renderPendientesPorClienta();
     renderEntregas();
   }
   // Se expone para que el bloque de login pueda refrescar la interfaz apenas se
@@ -3184,13 +3444,18 @@
       // silencio cualquier documento que no tenga ese campo (por ejemplo, órdenes muy
       // antiguas de antes de la migración). Traemos todo y ordenamos en el navegador.
       db.collection("orders").onSnapshot(function(snap){
-        orders = snap.docs.map(function(d){ return ensureOrderItems(d.data()); });
-        orders.sort(function(a, b){
+        var todas = snap.docs.map(function(d){ return ensureOrderItems(d.data()); });
+        var porFecha = function(a, b){
           var da = a.createdAt || "";
           var db_ = b.createdAt || "";
           if (da === db_) return 0;
           return da < db_ ? 1 : -1; // más reciente primero
-        });
+        };
+        // Las órdenes "eliminadas" (con evidencia) se guardan aparte para que no
+        // aparezcan en ninguna lista, reporte o conteo normal, pero sigan existiendo
+        // por si hay que restaurarlas (ver pestaña Órdenes → "Mostrar eliminadas").
+        orders = todas.filter(function(o){ return !o.eliminada; }).sort(porFecha);
+        ordersEliminadas = todas.filter(function(o){ return !!o.eliminada; }).sort(porFecha);
         renderAll();
       }, function(err){
         console.error("Error sincronizando órdenes:", err);
@@ -3221,7 +3486,7 @@
   window.__aoriStopSync = function(){
     __unsubs.forEach(function(fn){ fn(); });
     __unsubs = [];
-    orders = []; zonas = []; vendedores = []; clientes = [];
+    orders = []; ordersEliminadas = []; zonas = []; vendedores = []; clientes = [];
   };
 
   // ---------- Roles de acceso ----------
