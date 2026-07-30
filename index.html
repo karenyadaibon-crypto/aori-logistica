@@ -318,6 +318,7 @@
     <button data-view="reparto">Reparto</button>
     <button data-view="pendientes">Pendientes</button>
     <button data-view="reportediario">Reporte diario</button>
+    <button data-view="reporteproductos">Reporte de productos</button>
     <button data-view="pendientesporclienta">Pendientes por clienta</button>
     <button data-view="entregas">Entregas</button>
     <button data-view="vendedores">Vendedores</button>
@@ -570,6 +571,17 @@
       <p class="muted small">Esto es siempre "ahora mismo" (no depende de la fecha de arriba): pedidos ya aprobados que todavía nadie ha empezado a empacar.</p>
       <div id="repDiaSinIniciarBox"></div>
       <div class="empty" id="repDiaSinIniciarEmpty" style="display:none;">No hay pedidos esperando para empezar a empacarse.</div>
+    </div>
+  </div>
+
+  <!-- REPORTE DE PRODUCTOS -->
+  <div class="view" id="view-reporteproductos">
+    <div class="panel">
+      <h2>Reporte de productos</h2>
+      <p class="muted small">Cuánto se ha solicitado de cada producto en TODOS los pedidos que alguna vez se crearon (incluye cancelados y eliminados), y cuánto de eso sigue sin surtirse. Como los productos se escriben libremente por línea en cada pedido, se agrupan por texto (ignorando mayúsculas y espacios de más) — variaciones de redacción distintas (ej. "blusa M" vs "blusa talla M") se cuentan aparte.</p>
+      <div class="filters"><div class="field"><label>Buscar producto</label><input id="rpBusca" placeholder="Nombre del producto"></div></div>
+      <div id="rpBox"></div>
+      <div class="empty" id="rpEmpty" style="display:none;">Aún no hay productos registrados en ningún pedido.</div>
     </div>
   </div>
 
@@ -3386,6 +3398,48 @@
   }
   document.getElementById("pxcBusca").addEventListener("input", renderPendientesPorClienta);
 
+  // ---------- Reporte de productos (solicitado vs. pendiente, histórico completo) ----------
+  // Incluye TODOS los pedidos que alguna vez se crearon, incluso cancelados y eliminados
+  // (por eso se junta "orders" con "ordersEliminadas" aquí — es el único reporte que lo hace).
+  // Como cada línea de producto es texto libre, se agrupa por texto normalizado
+  // (recortado y en minúsculas) para que "Blusa M" y "blusa m " caigan en el mismo grupo;
+  // se muestra con la redacción de la primera vez que se escribió así.
+  function getReporteProductos(){
+    var todas = orders.concat(ordersEliminadas);
+    var grupos = {};
+    todas.forEach(function(o){
+      ensureOrderItems(o);
+      o.items.forEach(function(it){
+        var key = String(it.texto || "").trim().toLowerCase();
+        if (!key) return;
+        if (!grupos[key]) grupos[key] = { label: it.texto.trim(), solicitado: 0, surtido: 0 };
+        grupos[key].solicitado++;
+        if (it.surtido) grupos[key].surtido++;
+      });
+    });
+    return grupos;
+  }
+  function renderReporteProductos(){
+    var busca = document.getElementById("rpBusca").value.toLowerCase().trim();
+    var grupos = getReporteProductos();
+    var keys = Object.keys(grupos).filter(function(k){ return !busca || k.indexOf(busca) > -1; })
+      .sort(function(a, b){ return grupos[b].solicitado - grupos[a].solicitado; });
+    var box = document.getElementById("rpBox");
+    if (!keys.length) {
+      box.innerHTML = "";
+      document.getElementById("rpEmpty").style.display = "block";
+      return;
+    }
+    document.getElementById("rpEmpty").style.display = "none";
+    box.innerHTML = '<table><thead><tr><th>Producto</th><th>Solicitado (total histórico)</th><th>Surtido</th><th>Pendiente por surtir</th></tr></thead><tbody>' +
+      keys.map(function(k){
+        var g = grupos[k];
+        var pendiente = g.solicitado - g.surtido;
+        return '<tr><td>'+esc(g.label)+'</td><td>'+g.solicitado+'</td><td>'+g.surtido+'</td><td>'+(pendiente ? '<strong>'+pendiente+'</strong>' : '0')+'</td></tr>';
+      }).join("") + '</tbody></table>';
+  }
+  document.getElementById("rpBusca").addEventListener("input", renderReporteProductos);
+
   function renderAll(){
     fillRutaOptions();
     fillEstadoOptions();
@@ -3405,6 +3459,7 @@
     renderReparto();
     renderPendientes();
     renderReporteDiario();
+    renderReporteProductos();
     renderPendientesPorClienta();
     renderEntregas();
   }
